@@ -56,6 +56,7 @@ __attribute__((section(".isr_vector"))) void (*const vector_table[])(void) = {
     0,                                        /*     Reserved */
     PendSV_Handler,                           /*  -2 PendSV Handler */
     SysTick_Handler,                          /*  -1 SysTick Handler */ 
+    0,0,0,0,0,
     uart_irq, // UART0 interrupt
 };
 extern void __libc_init_array();

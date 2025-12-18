@@ -14,10 +14,10 @@
 
 SEP="============================================="
 PROJECT = app
-SRCDIR = src freertos freertos/portable/ARM_CM4F
+SRCDIR = src freertos freertos/portable/ARM_CM3
 
 OUTDIR = out
-INCDIR = freertos/portable/ARM_CM4F \
+INCDIR = freertos/portable/ARM_CM3 \
 		 freertos/include
 
 CC = arm-none-eabi-gcc
@@ -26,7 +26,7 @@ OBJCOPY = arm-none-eabi-objcopy
 # CFLAGS  = -mcpu=cortex-m4 -mthumb -O0 -g -ffreestanding -fno-builtin -nostdlib -mfpu=fpv4-sp-d16 -mfloat-abi=hard
 # LDFLAGS = -T linker.ld -nostartfiles -Wl,--gc-sections,-Map=$(OUTDIR)/$(PROJECT).map
 LDSCRIPT = linker.ld
-MCU = -mcpu=cortex-m4 -mfloat-abi=hard -mfpu=fpv4-sp-d16
+MCU = -mcpu=cortex-m3
 CFLAGS = $(MCU) -mthumb $(C_INCS) -O0 -Wall -g
 LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) -lc -lm -lnosys -Wl,-Map=$(OUTDIR)/$(PROJECT).map
 
@@ -57,10 +57,10 @@ clean:
 
 run: $(ELF)
 # 	qemu-system-arm -M mps2-an386 -cpu cortex-m4 -nographic -kernel $(ELF) -d int,cpu_reset
-	qemu-system-arm -M mps2-an386 -cpu cortex-m4 -nographic -kernel $(ELF)
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF)
 
 debug: $(ELF)
-	qemu-system-arm -M mps2-an386 -cpu cortex-m4 -nographic -kernel $(ELF) -S -gdb tcp::1234
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -S -gdb tcp::1234
 
 diss: 
 	arm-none-eabi-objdump -d -C $(ELF) > $(OUTDIR)/$(PROJECT).diss
