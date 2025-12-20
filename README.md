@@ -2,8 +2,22 @@
 
 Small bare-metal C project for Cortex-M3.  based on ARM lm3s6965evb 
 
-  
-steps :  
+### QEMU Doc
+---
+The Luminary Micro Stellaris LM3S6965EVB emulation includes the following devices:
+
+Cortex-M3 CPU core.  
+256k Flash and 64k SRAM.  
+Timers, UARTs, ADC, I2C and SSI interfaces.  
+OSRAM Pictiva 128x64 OLED with SSD0323 controller connected via SSI.  
+
+in Qemu Repo
+
+
+for RTOS files in repo, can be copied from RTOS repo into wrking dir , with scripts/
+
+
+TASKS :  
 - [x] integrate RTOS  
 - [x] set up gdb debug in vscode  
 - [x] test uart with Qemu terminal 
