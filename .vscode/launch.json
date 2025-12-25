@@ -9,7 +9,7 @@
       "executable": "${workspaceFolder}/out/app.elf",
       "servertype": "external",
       "gdbTarget": "localhost:1234",
-      "device": "Cortex-M4" ,
+      "device": "Cortex-M3" ,
       "runToEntryPoint": "main",
       "showDevDebugOutput": "raw",
       "preLaunchTask": "LaunchQemu",

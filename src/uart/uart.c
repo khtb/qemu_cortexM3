@@ -1,8 +1,22 @@
-
-
-#include <stdint.h>
+/*
+###############################################################################
+#        _   __  _   _   _____   ____                           
+#       | | / / | | | | (_   _) |  _ \                          
+#       | |/ /  | |_| |   | |   | |_) )                         
+#       |   <   |  _  |   | |   |  _ (                          
+#       | |\ \  | | | |   | |   | |_) )                        
+#       |_| \_\ |_| |_|   |_|   |____/                         
+#                                                               
+###############################################################################
+******************************************************************************
+ * @file uart.c
+ * Author: KHTB 
+ * @brief Description of the header file
+******************************************************************************/
 #include "uart.h"
-#define RX_BUF_SIZE 64
+
+
+
 volatile char rxBuffer[RX_BUF_SIZE];
 volatile uint32_t rxHead = 0, rxTail = 0;
 volatile uint32_t txHead = 0, txTail = 0;
@@ -11,7 +25,7 @@ volatile uint32_t txHead = 0, txTail = 0;
 void uart_puts(const char *s);
 void uart_putc(char c);
 
-#define UART0_IRQn 5
+
 void uart_init(void)
 {
     UART0->CTL = 0;
@@ -45,7 +59,7 @@ void uart_irq(void)
         }
         if (c == 0x08 || c ==0x7f)
         {
-            uart_puts(" \b \b");
+            uart_puts("\b \b");
         }
         else
         {

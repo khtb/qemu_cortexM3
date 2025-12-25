@@ -2,21 +2,23 @@
 #include "uart.h"
 #include "FreeRTOS.h"
 #include "task.h"
-#include "ethernet/stellaris_eth.h"
+#include "stellaris_eth.h"
+
+
+#include "shell.h"
 
 void vTaskCounter(void *pvParameters)
 {
+    /* 100 msec */
     for (;;)
     {
-        char line[20] ;
-        int x = uart_readLine(line, 64);
-        // -1 is no new line
-        if (x != -1)
-        {
-            uart_puts(line);
-            uart_puts("\nOK\n");
-        }
+        shell_main();
         eth_poll();
+
+
+
+
+        vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
 
@@ -24,9 +26,10 @@ void vTaskCounter(void *pvParameters)
 int main(void)
 {
     uart_init();
-    uart_puts("Hello, MPS2 AN386 (Cortex-M4) via UART0!\n");
+    uart_puts("Hello, MPS2 lm3s6965evb (Cortex-M3) via UART0!\n");
     eth_init();
-    xTaskCreate(vTaskCounter, "CounterTask", 128, NULL, tskIDLE_PRIORITY + 1, NULL);
+    shell_init();
+    xTaskCreate(vTaskCounter, "CounterTask", 512, NULL, tskIDLE_PRIORITY + 1, NULL);
     // Start scheduler
     vTaskStartScheduler();
 }

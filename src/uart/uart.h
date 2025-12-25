@@ -1,21 +1,33 @@
-#ifndef _UART_H_
-#define _UART_H_
+/*
+###############################################################################
+#        _   __  _   _   _____   ____                           
+#       | | / / | | | | (_   _) |  _ \                          
+#       | |/ /  | |_| |   | |   | |_) )                         
+#       |   <   |  _  |   | |   |  _ (                          
+#       | |\ \  | | | |   | |   | |_) )                        
+#       |_| \_\ |_| |_|   |_|   |____/                         
+#                                                               
+################################################################################
+********************************************************************************
+ * @file uart.h
+ * Author: KHTB 
+ * @brief Description of the header file
+/*******************************************************************************/
+#ifndef UART_H_
+#define UART_H_
 
-
-#if 0
-
-/* ---- CMSDK UART0 on MPS2-AN386 ---- */
-#define UART0_BASE 0x40004000u /* APB UART0 base */
-#define UART0_IRQn   0  // IRQ number in QEMU for UART0
-
-typedef struct {
-    volatile uint32_t DATA;      /* 0x00 */
-    volatile uint32_t STATE;     /* 0x04 */
-    volatile uint32_t CTRL;      /* 0x08 */
-    volatile uint32_t INTSTATUS; /* 0x0C (also INTCLEAR on write) */
-    volatile uint32_t BAUDDIV;   /* 0x10 */
-} CMSDK_UART;
+#ifdef __cplusplus
+extern "C" {
 #endif
+
+
+#include <stdint.h>
+
+#define RX_BUF_SIZE 64u
+#define UART0_IRQn 5u
+
+
+
 
 typedef struct
 {
@@ -70,4 +82,8 @@ extern void uart_print(const char* s);
 extern int uart_getchar(void);
 extern int uart_readLine(char * line, int max_len);
 extern void uart_print_hex(uint32_t v);
+#ifdef __cplusplus
+}
 #endif
+
+#endif /* UART_H_ */

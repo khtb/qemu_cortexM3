@@ -15,7 +15,9 @@
 SEP="============================================="
 PROJECT = app
 SRCDIR = src freertos freertos/portable/ARM_CM3 \
-		 src/ethernet
+		 src/ethernet \
+		 src/uart    \
+		 src/shell
 
 OUTDIR = out
 INCDIR = freertos/portable/ARM_CM3 \

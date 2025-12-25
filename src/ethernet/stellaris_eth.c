@@ -31,7 +31,8 @@
  * eth_init: Configures the Ethernet controller for bidirectional traffic.
  * Sets the MAC address to 00:11:22:33:44:55 and enables promiscuous mode.
  */
-void eth_init(void) {
+void eth_init(void)
+{
   uart_puts("\n[Ethernet] Initializing LM3S6965 Controller...\n");
 
   /* 1. Enable Ethernet MAC and PHY clocks */
@@ -68,7 +69,8 @@ void eth_init(void) {
  * @param data: Pointer to the Ethernet frame (dst | src | type | payload)
  * @param len: Total length of the frame in bytes.
  */
-void eth_send(const uint8_t *data, uint32_t len) {
+void eth_send(const uint8_t *data, uint32_t len)
+{
   /* QEMU/Stellaris TX Framing:
    * First word written to MAC_DATA must contain the total packet length.
    */
@@ -77,7 +79,8 @@ void eth_send(const uint8_t *data, uint32_t len) {
   const uint32_t *p = (const uint32_t *)data;
   uint32_t words = (len + 3) / 4;
 
-  for (uint32_t i = 0; i < words; i++) {
+  for (uint32_t i = 0; i < words; i++)
+  {
     MAC_DATA = p[i];
   }
 
@@ -89,11 +92,13 @@ void eth_send(const uint8_t *data, uint32_t len) {
  * eth_poll: Checks for incoming packets and manages periodic heartbeats.
  * This function should be called frequently in the main loop.
  */
-void eth_poll(void) {
+void eth_poll(void)
+{
   /* Robust Packet Reception Loop */
   uint32_t np = MAC_NP;
 
-  while (np > 0) {
+  while (np > 0)
+  {
     /*
      * QEMU RX Framing:
      * The first word read from MAC_DATA contains:
@@ -110,15 +115,18 @@ void eth_poll(void) {
     uart_puts("\n");
 
     /* Safely consume the rest of the FIFO for this packet */
-    if (len > 0 && len < 1550) {
+    if (len > 0 && len < 1550)
+    {
       /* Since the first word included the first 2 bytes,
        * we need to read the remaining (len - 2) bytes as words.
        */
       int words_to_drain = (len + 2 + 3) / 4 - 1;
-      for (int i = 0; i < words_to_drain; i++) {
+      for (int i = 0; i < words_to_drain; i++)
+      {
         uint32_t dummy = MAC_DATA;
         /* Debug: Log first snippet of payload */
-        if (i == 0) {
+        if (i == 0)
+        {
           uart_puts("  Snippet: ");
           uart_print_hex(dummy);
           uart_puts("\n");
@@ -137,7 +145,8 @@ void eth_poll(void) {
    * Sends a simple broadcast frame every ~10k poll cycles.
    */
   static uint32_t heartbeat_cnt = 0;
-  if (++heartbeat_cnt % 10000 == 0) {
+  if (++heartbeat_cnt % 10000 == 0)
+  {
     uint8_t beacon[] = {
         0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, /* Destination: Broadcast */
         0x00, 0x11, 0x22, 0x33, 0x44, 0x55, /* Source: Guest MAC */
