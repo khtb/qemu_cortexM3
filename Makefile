@@ -14,11 +14,13 @@
 
 SEP="============================================="
 PROJECT = app
-SRCDIR = src freertos freertos/portable/ARM_CM3
+SRCDIR = src freertos freertos/portable/ARM_CM3 \
+		 src/ethernet
 
 OUTDIR = out
 INCDIR = freertos/portable/ARM_CM3 \
-		 freertos/include
+		 freertos/include \
+		 $(SRCDIR)
 
 CC = arm-none-eabi-gcc
 LD      = $(CC)
@@ -60,7 +62,9 @@ run: $(ELF)
 	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF)
 
 debug: $(ELF)
-	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -S -gdb tcp::1234
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -S -gdb tcp::1234 \
+	 -netdev socket,id=net0,listen=:8010 \
+	 -net nic,netdev=net0 
 
 diss: 
 	arm-none-eabi-objdump -d -C $(ELF) > $(OUTDIR)/$(PROJECT).diss

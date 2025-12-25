@@ -146,3 +146,10 @@ int uart_readLine(char * line, int max_len)
         }
     }
 }
+void uart_print_hex(uint32_t v) {
+  const char hex[] = "0123456789ABCDEF";
+  uart_puts("0x");
+  for (int i = 7; i >= 0; i--) {
+    uart_putc(hex[(v >> (i * 4)) & 0xF]);
+  }
+}

@@ -69,5 +69,5 @@ extern void uart_puts(const char* s);
 extern void uart_print(const char* s);
 extern int uart_getchar(void);
 extern int uart_readLine(char * line, int max_len);
-
+extern void uart_print_hex(uint32_t v);
 #endif
