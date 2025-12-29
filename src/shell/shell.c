@@ -19,32 +19,31 @@
 #include <string.h>
 
 static void shell_refreshPrompt(void);
+static int shell_autocomplete(char *buf, int *len, int max_len);
 
 // typedef int (*Shell_AppHandler_t)(int argc, char **argv);
 int Shell_Appl_Pwd(int argc, char **argv)
 {
-
 	uart_print("print working dir !!s");
+	return 0;
 }
-/* ANSI Escape Codes */
-#define ANSI_CLEAR_LINE "\r\x1b[K"
-#define ANSI_UP_CHAR    "\r\x1b[K"
 
 void shell_init(void)
 {
+	uart_set_autocomplete_cb(shell_autocomplete);
 	shell_refreshPrompt();
 }
 
 void shell_main(void)
 {
 	char line[100];
-	int x = uart_readLine(line,64);
-	if (x!= -1)
+	int x = uart_readLine(line, 64);
+	if (x != -1)
 	{
 		shell_execute(line);
+		shell_refreshPrompt();
 	}
 }
-
 
 void shell_refreshPrompt(void)
 {
@@ -70,7 +69,7 @@ void shell_execute(char *line)
 	{
 		if (strcmp(argv[0], registered_apps[i]->command) == 0)
 		{
-			if (strcmp(argv[1] ,"-h") == 0)
+			if (strcmp(argv[1], "-h") == 0)
 			{
 				uart_print(registered_apps[i]->help);
 			}
@@ -81,18 +80,50 @@ void shell_execute(char *line)
 				{
 					shell_log("ERROR: Command \n");
 				}
-				shell_refreshPrompt();
 				return;
 			}
+			
 		}
 	}
 	shell_log("Unknown command: \n");
-	shell_refreshPrompt();	
 }
-
-
 
 void shell_log(const char *logString)
 {
+	uart_print("\nLOG: INFO: ");
 	uart_print(logString);
+	uart_print("\n");
+	// shell_refreshPrompt();
+}
+
+int shell_autocomplete(char *buf, int *len, int max_len)
+{
+	int current_len = *len;
+	int matches = 0;
+	int match_idx = -1;
+	// Iterate through all registered apps
+	for (uint32_t i = 0; i < SHELL_MAX_APPS; i++)
+	{
+		// Check if command starts with buf
+		if (strncmp(registered_apps[i]->command, buf, current_len) == 0)
+		{
+			matches++;
+			match_idx = i;
+		}
+	}
+
+	// If exactly one match found, autocomplete it
+	if (matches == 1 && match_idx != -1)
+	{
+		const char *cmd = registered_apps[match_idx]->command;
+		int cmd_full_len = strlen(cmd);
+
+		if (cmd_full_len < max_len)
+		{
+			strcpy(buf, cmd);
+			*len = cmd_full_len;
+			return 1; // Completed
+		}
+	}
+	return 0;
 }

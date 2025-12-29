@@ -3,8 +3,6 @@
 #include "FreeRTOS.h"
 #include "task.h"
 #include "stellaris_eth.h"
-
-
 #include "shell.h"
 
 void vTaskCounter(void *pvParameters)
@@ -12,12 +10,16 @@ void vTaskCounter(void *pvParameters)
     /* 100 msec */
     for (;;)
     {
+        static uint8_t ctr = 0;
         shell_main();
         eth_poll();
-
-
-
-
+        if (ctr==10)
+        {
+            ctr = 0;
+            shell_log("INFO 100msec");
+        }else{
+            ctr++;
+        }
         vTaskDelay(pdMS_TO_TICKS(100));
     }
 }
