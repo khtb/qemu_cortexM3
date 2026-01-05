@@ -20,6 +20,12 @@
 extern "C" {
 #endif
 
+
+/* ANSI Escape Sequences */
+#define ANSI_CLEAR_LINE "\r\x1b[K" 
+
+
+
 #define SHELL_MAIN_PROMPT "Shell> "
 #define SHELL_MAX_ARGS    10u
 #define SHELL_MAX_APPS    3u
