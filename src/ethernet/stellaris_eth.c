@@ -75,16 +75,24 @@ void eth_init(void)
 void eth_send(const uint8_t *data, uint32_t len)
 {
     /* QEMU/Stellaris TX Framing:
-     * First word written to MAC_DATA must contain the total packet length.
+     * The first word written to MAC_DATA must contain:
+     * [15:0]  - Total packet length
+     * [31:16] - First two bytes of the packet (Header[0:1])
      */
-    MAC_DATA = (len & 0xFFFF);
+    uint32_t first = (len & 0xFFFF) | (data[0] << 16) | (data[1] << 24);
+    MAC_DATA = first;
 
-    const uint32_t *p = (const uint32_t *)data;
-    uint32_t words = (len + 3) / 4;
-
-    for (uint32_t i = 0; i < words; i++)
+    /* Write remaining bytes (2..len) in 4-byte words */
+    for (uint32_t i = 2; i < len; i += 4)
     {
-        MAC_DATA = p[i];
+        uint32_t word = data[i];
+        if (i + 1 < len)
+            word |= (data[i + 1] << 8);
+        if (i + 2 < len)
+            word |= (data[i + 2] << 16);
+        if (i + 3 < len)
+            word |= (data[i + 3] << 24);
+        MAC_DATA = word;
     }
 
     /* Set Transmit Request (TR) to start the engine */

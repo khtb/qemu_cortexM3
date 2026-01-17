@@ -43,6 +43,10 @@ The application uses a **Multi-Task Architecture** with FreeRTOS:
 3.  **Test Connectivity**:
     - Run `./scripts/listen_hello.sh` (Requires `netcat`).
     - You should see "Hello World" printed periodically.
+4. **Telnet Access**:
+    - The Telnet server listens on Guest Port 23, forwarded to Host Port **2323**.
+    - Run: `telnet localhost 2323` (or `nc localhost 2323`).
+    - You will see the `>` prompt and can execute shell commands like `help` or `net-status`.
 
 ### 5. Update the Build System
 Add the lwIP source files and include directories to the `Makefile`.
@@ -62,18 +66,25 @@ To update the lwIP stack:
 git submodule update --remote lib/lwip
 ```
 
-## Issues Encountered & Solutions
+### Issues Encountered & Solutions
 
-### 1. FreeRTOS Queue Assertion
-- **Issue**: Application crashed with `configASSERT` in `xQueueGenericCreate`.
-- **Cause**: lwIP was requesting mailboxes (queues) with size `0`, interpreting it as "use default", but `xQueueCreate` requires a positive size.
-- **Solution**:
-  - Modified `sys_mbox_new` in `sys_arch.c` to enforce a default minimum size if `size <= 0`.
-  - Defined explicit default mailbox sizes (`DEFAULT_TCP_RECVMBOX_SIZE`, etc.) in `lwipopts.h`.
+#### 1. FreeRTOS Queue Assertion
+- **Issue**: `configASSERT` failure in `xQueueGenericCreate` (called by `sys_mbox_new`).
+- **Cause**: partial `lwipopts.h` configuration led `sys_mbox_new` to request a mailbox of size 0.
+- **Solution**: Defined `TCPIP_MBOX_SIZE`, `DEFAULT_*_RECVMBOX_SIZE`, and `DEFAULT_ACCEPTMBOX_SIZE` in `lwipopts.h` (set to 16). Modified `sys_mbox_new` in `sys_arch.c` to clamp size to minimum 16 if 0 is passed.
 
-### 2. Heap Memory Management
-- **Issue**: `vPortFree` caused assertion failures / crashes.
-- **Cause**: The project was using `heap_1.c` (FreeRTOS default), which only supports allocation but **not** deallocation (`vPortFree` is a dummy function that traps execution). lwIP requires dynamic memory freeing.
+#### 2. Heap Memory Management
+- **Issue**: Linker errors or runtime crashes when using `heap_1.c`.
+- **Cause**: `heap_1.c` does not support `vPortFree`. lwIP requires dynamic memory deallocation (e.g., for pbufs, connections).
+- **Solution**: Switched to `heap_4.c` in `Makefile`. Added missing `#include <string.h>` locally to `heap_4.c` to fix implicit `memset` warning.
+
+#### 3. Ethernet TX Packet Corruption (Stellaris/QEMU)
+- **Issue**: Telnet connection would hang (Host side `CLOSE_WAIT`), and Guest logs showed ARP Replies being sent, but no TCP traffic received.
+- **Cause**: The `eth_send` function incorrectly wrote only the packet length to the first word of the TX FIFO. The QEMU Stellaris model expects the first word to contain **Length (lower 16 bits)** AND **First 2 Bytes of Payload (upper 16 bits)**. This caused the payload to be shifted by 2 bytes and zero-padded, corrupting the Destination MAC address of all outgoing packets. The Gateway ignored these corrupted ARP replies.
+- **Solution**: Updated `eth_send` in `stellaris_eth.c` to correctly pack the length and the first two bytes of the `data` buffer into the first write to `MAC_DATA`.
+
+#### 4. QEMU Networking Limitations
+ but **not** deallocation (`vPortFree` is a dummy function that traps execution). lwIP requires dynamic memory freeing.
 - **Solution**: Switched to `heap_4.c`, which supports memory coalescing and freeing.
 - **Note**: `heap_4.c` required patching to include `<string.h>` for `memset`.
 

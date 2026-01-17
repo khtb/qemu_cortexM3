@@ -28,10 +28,14 @@ extern "C"
 
 #define SHELL_MAIN_PROMPT "Shell> "
 #define SHELL_MAX_ARGS 10u
-#define SHELL_MAX_APPS 3u
+#define SHELL_MAX_APPS 10
+
+    typedef void (*shell_output_func_t)(const char *str);
+
     extern void shell_init(void);
     extern void shell_main(void);
     extern void shell_execute(char *line);
+    extern void shell_process(char *line, shell_output_func_t out_func);
     extern void shell_log(const char *logString);
 
     /**

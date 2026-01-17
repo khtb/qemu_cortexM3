@@ -13,6 +13,7 @@
 extern void vRegisterDummyCommand(void);
 extern void vRegisterNetCommands(void);
 extern void echo_init(void);
+extern void telnet_init(void);
 
 /* Main application task that handles both Shell and Network */
 struct netif gnetif;
@@ -68,6 +69,7 @@ int main(void)
     netif_set_up(&gnetif);
 
     echo_init();
+    telnet_init();
 
     /* Create Tasks */
     /* NetTask priority should be higher or equal to tcpip_thread (default 3) ideally,

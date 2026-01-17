@@ -60,7 +60,7 @@ void shell_main(void)
 
 void shell_refreshPrompt(void) { uart_print(SHELL_MAIN_PROMPT); }
 
-void shell_execute(char *line)
+void shell_process(char *line, shell_output_func_t out_func)
 {
     char pcOutputString[128];
     BaseType_t xReturned;
@@ -71,17 +71,18 @@ void shell_execute(char *line)
         /* Get the next string to print. */
         xReturned = FreeRTOS_CLIProcessCommand(line, pcOutputString, sizeof(pcOutputString));
 
-        /* Write the generated string to the UART. */
-        uart_print(pcOutputString);
+        /* Write the generated string using the callback. */
+        if (out_func)
+        {
+            out_func(pcOutputString);
+        }
 
     } while (xReturned != pdFALSE);
-
-    /* Fallback to legacy shell apps if needed (optional)
-       Note: FreeRTOS-Plus-CLI will return "Command not recognized" if not found.
-       If you want to keep legacy apps separately, you might need to check the output.
-       For now, we assume migration or that FreeRTOS-Plus-CLI handles it.
-    */
 }
+
+static void uart_shell_out(const char *str) { uart_print(str); }
+
+void shell_execute(char *line) { shell_process(line, uart_shell_out); }
 
 void shell_log(const char *logString)
 {

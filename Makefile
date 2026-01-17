@@ -77,7 +77,7 @@ run: $(ELF)
 # 	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic -net user,hostfwd=tcp::55007-:7 \
 
 debug: $(ELF)
-	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic,macaddr=00:11:22:33:44:55 -net user,hostfwd=tcp::12345-:7 \
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic,macaddr=00:11:22:33:44:55 -net user,hostfwd=tcp::12345-:7,hostfwd=tcp::2323-:23 \
 	-S -gdb tcp::1234 
 
 # Capture traffic to qemu_net.pcap (open in Wireshark)
@@ -85,7 +85,7 @@ debug: $(ELF)
 debug_pcap: $(ELF)
 	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) \
 	-net nic,macaddr=00:11:22:33:44:55,netdev=n1 \
-	-netdev user,id=n1,hostfwd=tcp::12345-:7 \
+	-netdev user,id=n1,hostfwd=tcp::12345-:7,hostfwd=tcp::2323-:23 \
 	-object filter-dump,id=f1,netdev=n1,file=qemu_net.pcap
 
 diss: 

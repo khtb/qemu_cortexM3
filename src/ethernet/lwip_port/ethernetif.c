@@ -57,7 +57,9 @@ static err_t low_level_output(struct netif *netif, struct pbuf *p)
     }
 
     eth_send(buffer, len);
-    uart_puts("[lwIP] Packet Sent\n");
+    uart_puts("[lwIP] Packet Sent. Type: 0x");
+    uart_print_hex((buffer[12] << 8) | buffer[13]);
+    uart_puts("\n");
 
     return ERR_OK;
 }
@@ -111,7 +113,12 @@ void ethernetif_input(struct netif *netif)
             p = NULL;
         }
         else
-            uart_puts("[lwIP] Packet Received\n");
+        {
+            struct eth_hdr *ethhdr = (struct eth_hdr *)p->payload;
+            uart_puts("[lwIP] Packet Received. Type: 0x");
+            uart_print_hex(ntohs(ethhdr->type));
+            uart_puts("\n");
+        }
     }
 }
 
