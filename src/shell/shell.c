@@ -21,6 +21,11 @@
 #include <stdio.h>
 #include <string.h>
 
+extern void vRegisterCLICommands(void);
+extern void vRegisterCLICommands(void);
+extern void vRegisterNetCommands(void);
+extern void vRegisterPingCommand(void);
+
 extern void vRegisterDummyCommand(void);
 
 static void shell_refreshPrompt(void);
@@ -36,6 +41,8 @@ int Shell_Appl_Pwd(int argc, char **argv)
 void shell_init(void)
 {
     vRegisterDummyCommand();
+    vRegisterNetCommands();
+    vRegisterPingCommand();
     uart_set_autocomplete_cb(shell_autocomplete);
     shell_refreshPrompt();
 }

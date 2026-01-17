@@ -14,7 +14,9 @@
  * @brief Description of the header file
 ******************************************************************************/
 #include "uart.h"
+#include <stdarg.h>
 #include <stddef.h>
+#include <stdio.h>
 #include <string.h>
 
 // Forward declarations
@@ -280,6 +282,16 @@ int uart_readLine(char *line, int max_len)
     line_ready = 0;
 
     return ret_len;
+}
+
+void uart_printf(const char *fmt, ...)
+{
+    char buf[256];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+    uart_puts(buf);
 }
 
 /* print value in hex , to be optimized */

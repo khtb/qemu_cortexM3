@@ -16,14 +16,23 @@ SEP="============================================="
 PROJECT = app
 SRCDIR = src freertos freertos/portable/ARM_CM3 \
 		 src/ethernet \
+		 src/ethernet/lwip_port \
 		 src/uart    \
 		 src/shell \
-		 lib/FreeRTOS-Plus-CLI
+		 lib/FreeRTOS-Plus-CLI \
+		 lib/lwip/src/core \
+		 lib/lwip/src/core/ipv4 \
+		 lib/lwip/src/api
+
+# Specific files instead of whole directories if needed
+LWIP_NETIF_FILES = lib/lwip/src/netif/ethernet.c
 
 OUTDIR = out
 INCDIR = freertos/portable/ARM_CM3 \
 		 freertos/include \
 		 lib/FreeRTOS-Plus-CLI \
+		 lib/lwip/src/include \
+		 src/ethernet/lwip_port \
 		 $(SRCDIR)
 
 CC = arm-none-eabi-gcc
@@ -37,7 +46,7 @@ CFLAGS = $(MCU) -mthumb $(C_INCS) -O0 -Wall -g
 LDFLAGS = $(MCU) -specs=nano.specs -T$(LDSCRIPT) -lc -lm -lnosys -Wl,-Map=$(OUTDIR)/$(PROJECT).map
 
 
-SRC     := $(foreach d, $(SRCDIR),$(wildcard $(d)/*.c))
+SRC     := $(foreach d, $(SRCDIR),$(wildcard $(d)/*.c)) $(LWIP_NETIF_FILES)
 OBJ     := $(patsubst %.c,$(OUTDIR)/%.o,$(SRC))
 # OBJ     := $(patsubst $(SRCDIR)/%.c,$(OUTDIR)/%.o,$(SRC))
 # OBJ       :=$(foreach d,$(SRCDIR),$(wildcard $(d)/*.c))
@@ -63,12 +72,21 @@ clean:
 
 run: $(ELF)
 # 	qemu-system-arm -M mps2-an386 -cpu cortex-m4 -nographic -kernel $(ELF) -d int,cpu_reset
-	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF)
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic,macaddr=00:11:22:33:44:55 -net user,hostfwd=tcp::12345-:7
+
+# 	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic -net user,hostfwd=tcp::55007-:7 \
 
 debug: $(ELF)
-	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -S -gdb tcp::1234 \
-	 -netdev socket,id=net0,listen=:8010 \
-	 -net nic,netdev=net0 
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic,macaddr=00:11:22:33:44:55 -net user,hostfwd=tcp::12345-:7 \
+	-S -gdb tcp::1234 
+
+# Capture traffic to qemu_net.pcap (open in Wireshark)
+# Capture traffic to qemu_net.pcap (open in Wireshark)
+debug_pcap: $(ELF)
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) \
+	-net nic,macaddr=00:11:22:33:44:55,netdev=n1 \
+	-netdev user,id=n1,hostfwd=tcp::12345-:7 \
+	-object filter-dump,id=f1,netdev=n1,file=qemu_net.pcap
 
 diss: 
 	arm-none-eabi-objdump -d -C $(ELF) > $(OUTDIR)/$(PROJECT).diss
