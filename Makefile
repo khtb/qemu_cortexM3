@@ -72,7 +72,7 @@ clean:
 
 run: $(ELF)
 # 	qemu-system-arm -M mps2-an386 -cpu cortex-m4 -nographic -kernel $(ELF) -d int,cpu_reset
-	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic,macaddr=00:11:22:33:44:55 -net user,hostfwd=tcp::12345-:7
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic,macaddr=00:11:22:33:44:55 -net user,hostfwd=tcp::12345-:7,hostfwd=tcp::2323-:23
 
 # 	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) -net nic -net user,hostfwd=tcp::55007-:7 \
 
