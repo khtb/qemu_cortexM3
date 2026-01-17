@@ -37,7 +37,29 @@ To test it in the shell:
 Shell> dummy
 ```
 
+## Dependencies and Configuration
+
+The FreeRTOS-Plus-CLI requires the following setup to function correctly:
+
+### FreeRTOS Kernel
+The CLI is designed to work with the FreeRTOS kernel. Ensure `FreeRTOS.h` is included before `FreeRTOS_CLI.h` in your source files.
+
+### Configuration Macros
+The following macros must be defined in your `FreeRTOSConfig.h`:
+
+```c
+/* FreeRTOS-Plus-CLI configuration */
+#define configCOMMAND_INT_MAX_OUTPUT_SIZE 1024
+#define configSUPPORT_DYNAMIC_ALLOCATION 1
+```
+
+- `configCOMMAND_INT_MAX_OUTPUT_SIZE`: Defines the size of the buffer used by the CLI to store output strings.
+- `configSUPPORT_DYNAMIC_ALLOCATION`: While not strictly required by the core CLI logic, it is often necessary if you plan to use dynamic command registration or other FreeRTOS features that require heap.
+
+### I/O Interface
+You must provide a way to send strings to your output device (e.g., UART). In this project, `uart_print()` is used to transmit the generated output buffer.
+
 ## Build System
 
 The Makefile has been updated to include:
-- `lib/FreeRTOS/FreeRTOS-Plus/Source/FreeRTOS-Plus-CLI` in the source and include paths.
+- `lib/FreeRTOS-Plus-CLI` in the source and include paths.
