@@ -17,11 +17,13 @@ PROJECT = app
 SRCDIR = src freertos freertos/portable/ARM_CM3 \
 		 src/ethernet \
 		 src/uart    \
-		 src/shell
+		 src/shell \
+		 lib/FreeRTOS-Plus-CLI
 
 OUTDIR = out
 INCDIR = freertos/portable/ARM_CM3 \
 		 freertos/include \
+		 lib/FreeRTOS-Plus-CLI \
 		 $(SRCDIR)
 
 CC = arm-none-eabi-gcc
