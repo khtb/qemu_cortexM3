@@ -1,3 +1,6 @@
 [submodule "lib/lwip"]
 	path = lib/lwip
 	url = https://github.com/lwip-tcpip/lwip.git
+[submodule "tools/ethernet_logger/vendor/imgui"]
+	path = tools/ethernet_logger/vendor/imgui
+	url = https://github.com/ocornut/imgui.git
