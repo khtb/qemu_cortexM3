@@ -16,7 +16,8 @@
 #ifndef SHELL_H_
 #define SHELL_H_
 
-#include <stdint.h>
+#include "FreeRTOS.h"
+#include "FreeRTOS_CLI.h"
 
 #ifdef __cplusplus
 extern "C"
@@ -28,7 +29,7 @@ extern "C"
 
 #define SHELL_MAIN_PROMPT "Shell> "
 #define SHELL_MAX_ARGS 10u
-#define SHELL_MAX_APPS 10
+#define SHELL_MAX_COMMANDS 20
 
     typedef void (*shell_output_func_t)(const char *str);
 
@@ -37,23 +38,11 @@ extern "C"
     extern void shell_execute(char *line);
     extern void shell_process(char *line, shell_output_func_t out_func);
     extern void shell_log(const char *logString);
+    extern int shell_autocomplete(char *buf, int *len, int max_len);
 
-    /**
-     * @brief Command handler function pointer
-     */
-    typedef int (*Shell_AppHandler_t)(int argc, char **argv);
-
-    /**
-     * @brief Shell Application (Command) Descriptor
-     */
-    typedef struct
-    {
-        const char *command;
-        const char *help;
-        Shell_AppHandler_t handler;
-    } Shell_App_t;
-
-    extern const Shell_App_t *registered_apps[SHELL_MAX_APPS];
+    /* Centralized command list (Defined in shell_AppCfg.c) */
+    extern const CLI_Command_Definition_t *const g_registered_commands[];
+    extern const size_t g_num_registered_commands;
 
 #ifdef __cplusplus
 }

@@ -109,3 +109,10 @@ git submodule update --remote lib/lwip
     - Enabled Promiscuous Mode in Ethernet Driver initialization.
     - Split architecture back to multi-tasking so `vTaskNet` runs in background while CLI waits.
 
+### 6. QEMU Networking Architecture (SLIRP)
+- **Guest IP (10.0.2.15)**: This is a virtual address assigned by QEMU's internal DHCP server. It exists only within the virtual network managed by QEMU.
+- **NAT**: QEMU acts as a Network Address Translator (NAT). It lets the guest reach the internet, but the guest's IP is not directly reachable/routable from your host machine.
+- **Port Forwarding (`hostfwd`)**: To communicate from your host to the guest, we use "port forwarding".
+  - In our `Makefile`: `tcp::2323-:23`
+  - This maps the **Host's localhost port 2323** to the **Guest's port 23**.
+  - This is why you must connect to `localhost:2323` to reach the Telnet server. Your machine does not have a route to `10.0.2.15`, but QEMU transparently bridges the traffic for you.

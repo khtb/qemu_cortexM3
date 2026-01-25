@@ -284,6 +284,12 @@ int uart_readLine(char *line, int max_len)
     return ret_len;
 }
 
+#include "FreeRTOS.h"
+#include "task.h"
+
+extern TaskHandle_t xShellTaskHandle;
+#define CLI_PROMPT "Shell> "
+
 void uart_printf(const char *fmt, ...)
 {
     char buf[256];
@@ -291,7 +297,27 @@ void uart_printf(const char *fmt, ...)
     va_start(args, fmt);
     vsnprintf(buf, sizeof(buf), fmt, args);
     va_end(args);
-    uart_puts(buf);
+
+    /* Check if we are in an interrupt or a background task */
+    /* If xShellTaskHandle is initialized, and we are NOT the shell task, use safe logging */
+    if (xShellTaskHandle != NULL && xTaskGetCurrentTaskHandle() != xShellTaskHandle)
+    {
+        /* Remove trailing newline for log_and_refresh as it handles it?
+           Actually uart_log_and_refresh checks? No, it prints newline.
+           But usually printf has newline.
+           If buf has newline at end, remove it because log_and_refresh adds one.
+        */
+        int len = strlen(buf);
+        if (len > 0 && buf[len - 1] == '\n')
+        {
+            buf[len - 1] = '\0';
+        }
+        uart_log_and_refresh(buf, CLI_PROMPT);
+    }
+    else
+    {
+        uart_puts(buf);
+    }
 }
 
 /* print value in hex , to be optimized */

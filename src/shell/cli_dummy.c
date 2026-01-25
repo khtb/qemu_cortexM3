@@ -5,8 +5,8 @@
 #include <string.h>
 
 /* The function that implements the dummy command. */
-static BaseType_t prvDummyCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
-                                  const char *pcCommandString);
+BaseType_t prvDummyCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
+                           const char *pcCommandString);
 
 /* Structure that defines the "dummy" command line command. */
 static const CLI_Command_Definition_t xDummyCommand = {
@@ -16,11 +16,7 @@ static const CLI_Command_Definition_t xDummyCommand = {
     0                /* No parameters are expected. */
 };
 
-/* Function to register the command. */
-void vRegisterDummyCommand(void) { FreeRTOS_CLIRegisterCommand(&xDummyCommand); }
-
-static BaseType_t prvDummyCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
-                                  const char *pcCommandString)
+BaseType_t prvDummyCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString)
 {
     (void)pcCommandString;
     strncpy(pcWriteBuffer, "Dummy command executed successfully via FreeRTOS-Plus-CLI!\r\n",

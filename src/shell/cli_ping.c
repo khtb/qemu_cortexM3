@@ -85,8 +85,7 @@ static void ping_send(struct raw_pcb *raw, const ip_addr_t *addr)
     pbuf_free(p);
 }
 
-static BaseType_t prvPingCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
-                                 const char *pcCommandString)
+BaseType_t prvPingCommand(char *pcWriteBuffer, size_t xWriteBufferLen, const char *pcCommandString)
 {
     static int ping_run_step = 0;
     static struct raw_pcb *raw_ping_pcb = NULL;
@@ -165,5 +164,3 @@ static BaseType_t prvPingCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
 
 static const CLI_Command_Definition_t xPingCommand = {
     "ping", "\r\nping <ip>:\r\n Ping an IP address\r\n", prvPingCommand, 1};
-
-void vRegisterPingCommand(void) { FreeRTOS_CLIRegisterCommand(&xPingCommand); }

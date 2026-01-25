@@ -8,8 +8,8 @@
 
 extern struct netif gnetif;
 
-static BaseType_t prvNetStatusCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
-                                      const char *pcCommandString)
+BaseType_t prvNetStatusCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
+                               const char *pcCommandString)
 {
     (void)pcCommandString;
 
@@ -33,5 +33,3 @@ static BaseType_t prvNetStatusCommand(char *pcWriteBuffer, size_t xWriteBufferLe
 
 static const CLI_Command_Definition_t xNetStatus = {
     "net-status", "net-status: Shows network interface information\r\n", prvNetStatusCommand, 0};
-
-void vRegisterNetCommands(void) { FreeRTOS_CLIRegisterCommand(&xNetStatus); }

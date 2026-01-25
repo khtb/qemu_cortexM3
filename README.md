@@ -1,10 +1,32 @@
-# ARM Cortex-M3 (QEMU)
+# QEMU Cortex-M3 Ethernet Project
 
-Small bare-metal C project for Cortex-M3.  based on ARM lm3s6965evb 
+## Overview
+This project simulates a Cortex-M3 (Stellaris LM3S6965) with Ethernet support on QEMU.
+It features FreeRTOS, LwIP, a CLI shell, and a custom Ethernet Logger.
 
-### QEMU Doc
----
-The Luminary Micro Stellaris LM3S6965EVB emulation includes the following devices:
+## Ethernet Logger
+A custom Logger Task sends debug messages as raw Ethernet L2 frames (EtherType 0x88B5).
+A companion GUI tool (`tools/ethernet_logger`) receives and displays these logs.
+
+### Usage
+1. Build and run the GUI tool:
+   ```bash
+   cd tools/ethernet_logger && make && ./eth_logger
+   ```
+2. Run QEMU with logger support (in a separate terminal):
+   ```bash
+   make run_logger
+   ```
+3. Use the `log <msg>` shell command in QEMU to send custom logs.
+
+## Shell Commands
+- `net-status`: Show IP/MAC info.
+- `ping <ip>`: Ping an IP address.
+- `log <msg>`: Send a log message to the logger tool.
+- `help`: List commands.
+
+## Build & Run (Standard)
+LM3S6965EVB emulation includes the following devices:
 
 Cortex-M3 CPU core.  
 256k Flash and 64k SRAM.  

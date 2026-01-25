@@ -1,5 +1,6 @@
 #include "FreeRTOS.h"
 #include "ethernetif.h"
+#include "logger_task.h"
 #include "lwip/ip_addr.h"
 #include "lwip/netif.h"
 #include "lwip/tcpip.h"
@@ -8,25 +9,41 @@
 #include "task.h"
 #include "uart.h"
 #include <stdint.h>
+#include <stdio.h>
 
 // External declarations for shell command registration functions
-extern void vRegisterDummyCommand(void);
-extern void vRegisterNetCommands(void);
 extern void echo_init(void);
 extern void telnet_init(void);
 
 /* Main application task that handles both Shell and Network */
 struct netif gnetif;
+TaskHandle_t xShellTaskHandle = NULL;
 
 /* Network Task: Polls the Ethernet Controller */
 void vTaskNet(void *pvParameters)
 {
     (void)pvParameters;
     uart_puts("[NetTask] Started.\n");
+    logger_log("NetTask Started");
+
+    TickType_t last_log = 0;
 
     for (;;)
     {
         ethernetif_input(&gnetif);
+
+        // Log every second
+        if (xTaskGetTickCount() - last_log > pdMS_TO_TICKS(1000))
+        {
+            char buf[32];
+            // Minimal snprintf or just manual string logic if no libc
+            // Assuming we have basic libc (newlib) from arm-none-eabi
+            // sprintf(buf, "Tick: %lu", xTaskGetTickCount());
+            // Safety: use a static string for now to avoid libc bloat risks if not linked
+            logger_log("System Tick...");
+            last_log = xTaskGetTickCount();
+        }
+
         /*
          * Lower delay or no delay might be better for throughput,
          * but we yield to prevent starvation if priorities are equal.
@@ -51,6 +68,7 @@ void vTaskShell(void *pvParameters)
 
 int main(void)
 {
+    setvbuf(stdout, NULL, _IONBF, 0); // Disable buffering
     uart_init();
     uart_puts("\n\nHello, QEMU Cortex-M3 with lwIP stack!\n");
 
@@ -70,6 +88,7 @@ int main(void)
 
     echo_init();
     telnet_init();
+    logger_init();
 
     /* Create Tasks */
     /* NetTask priority should be higher or equal to tcpip_thread (default 3) ideally,
@@ -77,7 +96,7 @@ int main(void)
     xTaskCreate(vTaskNet, "NetTask", 1024, NULL, tskIDLE_PRIORITY + 3, NULL);
 
     /* ShellTask can be lower priority */
-    xTaskCreate(vTaskShell, "ShellTask", 1024, NULL, tskIDLE_PRIORITY + 1, NULL);
+    xTaskCreate(vTaskShell, "ShellTask", 1024, NULL, tskIDLE_PRIORITY + 1, &xShellTaskHandle);
 
     // Start scheduler
     vTaskStartScheduler();

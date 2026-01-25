@@ -88,6 +88,13 @@ debug_pcap: $(ELF)
 	-netdev user,id=n1,hostfwd=tcp::12345-:7,hostfwd=tcp::2323-:23 \
 	-object filter-dump,id=f1,netdev=n1,file=qemu_net.pcap
 
+# Run with logger support (sends L2 frames to UDP 12345)
+# Note: Standard networking (ping google) might not work in this mode as it replaces 'user' backend
+run_logger: $(ELF)
+	qemu-system-arm -M lm3s6965evb -m 16 -cpu cortex-m3 -nographic -kernel $(ELF) \
+	-net nic,macaddr=00:11:22:33:44:55,netdev=n1 \
+	-netdev socket,id=n1,udp=127.0.0.1:12345,localaddr=127.0.0.1:12348
+
 diss: 
 	arm-none-eabi-objdump -d -C $(ELF) > $(OUTDIR)/$(PROJECT).diss
 

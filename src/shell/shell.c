@@ -21,15 +21,8 @@
 #include <stdio.h>
 #include <string.h>
 
-extern void vRegisterCLICommands(void);
-extern void vRegisterCLICommands(void);
-extern void vRegisterNetCommands(void);
-extern void vRegisterPingCommand(void);
-
-extern void vRegisterDummyCommand(void);
-
 static void shell_refreshPrompt(void);
-static int shell_autocomplete(char *buf, int *len, int max_len);
+int shell_autocomplete(char *buf, int *len, int max_len);
 
 // typedef int (*Shell_AppHandler_t)(int argc, char **argv);
 int Shell_Appl_Pwd(int argc, char **argv)
@@ -40,9 +33,12 @@ int Shell_Appl_Pwd(int argc, char **argv)
 
 void shell_init(void)
 {
-    vRegisterDummyCommand();
-    vRegisterNetCommands();
-    vRegisterPingCommand();
+    /* Register all centralized commands from the global list */
+    for (size_t i = 0; i < g_num_registered_commands; i++)
+    {
+        FreeRTOS_CLIRegisterCommand(g_registered_commands[i]);
+    }
+
     uart_set_autocomplete_cb(shell_autocomplete);
     shell_refreshPrompt();
 }
@@ -96,11 +92,11 @@ int shell_autocomplete(char *buf, int *len, int max_len)
     int current_len = *len;
     int matches = 0;
     int match_idx = -1;
-    // Iterate through all registered apps
-    for (uint32_t i = 0; i < SHELL_MAX_APPS; i++)
+
+    /* Iterate through the centralized registered commands list */
+    for (size_t i = 0; i < g_num_registered_commands; i++)
     {
-        // Check if command starts with buf
-        if (strncmp(registered_apps[i]->command, buf, current_len) == 0)
+        if (strncmp(g_registered_commands[i]->pcCommand, buf, current_len) == 0)
         {
             matches++;
             match_idx = i;
@@ -110,7 +106,7 @@ int shell_autocomplete(char *buf, int *len, int max_len)
     // If exactly one match found, autocomplete it
     if (matches == 1 && match_idx != -1)
     {
-        const char *cmd = registered_apps[match_idx]->command;
+        const char *cmd = g_registered_commands[match_idx]->pcCommand;
         int cmd_full_len = strlen(cmd);
 
         if (cmd_full_len < max_len)
