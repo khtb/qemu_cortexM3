@@ -13,7 +13,9 @@
 namespace GUI
 {
 
-int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &filter_initial)
+GuiApp::GuiApp(const Core::AppConfig &config) : m_config(config) {}
+
+int GuiApp::run()
 {
     if (SDL_Init(SDL_INIT_VIDEO | SDL_INIT_TIMER | SDL_INIT_GAMECONTROLLER) != 0)
     {
@@ -48,7 +50,7 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
     // State
     std::vector<LogEntry> logs;
     bool auto_scroll = true;
-    int current_mode = l2_mode_initial ? 1 : 0;
+    int current_mode = m_config.l2_mode ? 1 : 0;
 
     // L2 State
     L2Capture l2_capture;
@@ -56,7 +58,7 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
     auto devices = get_device_list();
     int selected_device_idx = -1;
     char ethertype_buf[16] = "0x88B5"; // Default
-    Filter filter = filter_initial;    // Local copy to modify
+    Filter filter = m_config.filter;   // Local copy to modify
 
     // UDP State
     int udp_sockfd = -1;
@@ -66,11 +68,11 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
     }
 
     // Pre-select iface if provided
-    if (!iface_initial.empty())
+    if (!m_config.iface.empty())
     {
         for (size_t i = 0; i < devices.size(); i++)
         {
-            if (devices[i].name == iface_initial)
+            if (devices[i].name == m_config.iface)
             {
                 selected_device_idx = i;
                 break;
@@ -78,7 +80,7 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
         }
     }
     // Auto-start if L2 mode requested via args
-    if (l2_mode_initial && selected_device_idx >= 0)
+    if (m_config.l2_mode && selected_device_idx >= 0)
     {
         if (l2_capture.open_capture(devices[selected_device_idx].name))
         {
@@ -123,13 +125,19 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
                         {
                             struct eth_header *eh = (struct eth_header *)buffer;
                             unsigned short ether_type = ntohs(eh->h_proto);
-                            if (ether_type == ETH_P_LOG)
+                            if (m_config.filter.has_type ? (ether_type == m_config.filter.type)
+                                                         : (ether_type == ETH_P_LOG))
                             {
                                 std::string msg((char *)(buffer + 14), n - 14);
                                 if (!msg.empty() && msg.back() == '\0')
                                     msg.pop_back();
                                 logs.push_back({ImGui::GetTime(), msg, n});
-                                printf("[%.3f] (%d bytes) %s\n", ImGui::GetTime(), n, msg.c_str());
+
+                                if (m_config.payload_only)
+                                    printf("%s\n", msg.c_str());
+                                else
+                                    printf("[%.3f] (%d bytes) %s\n", ImGui::GetTime(), n,
+                                           msg.c_str());
                                 fflush(stdout);
                             }
                         }
@@ -180,7 +188,11 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
 
             if (current_mode == 0)
             {
-                ImGui::Text("Listening on UDP :12345 for EtherType 0x88B5");
+                if (m_config.filter.has_type)
+                    ImGui::Text("Listening on UDP :12345 for EtherType 0x%04X",
+                                m_config.filter.type);
+                else
+                    ImGui::Text("Listening on UDP :12345 for EtherType 0x88B5");
             }
             else
             {
@@ -323,7 +335,11 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
                               ImGuiWindowFlags_HorizontalScrollbar);
             for (const auto &log : logs)
             {
-                ImGui::Text("[%.3f] (%d bytes) %s", log.timestamp, log.length, log.message.c_str());
+                if (m_config.payload_only)
+                    ImGui::Text("%s", log.message.c_str());
+                else
+                    ImGui::Text("[%.3f] (%d bytes) %s", log.timestamp, log.length,
+                                log.message.c_str());
             }
             if (auto_scroll && ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
                 ImGui::SetScrollHereY(1.0f);

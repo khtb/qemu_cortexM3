@@ -1,8 +1,16 @@
 #pragma once
-#include "../core/Filter.h"
-#include <string>
+#include "../core/AppConfig.h"
+#include "../core/IApp.h"
 
 namespace GUI
 {
-int run(bool l2_mode, const std::string &iface, const Filter &filter);
-}
+class GuiApp : public Core::IApp
+{
+  public:
+    explicit GuiApp(const Core::AppConfig &config);
+    int run() override;
+
+  private:
+    Core::AppConfig m_config;
+};
+} // namespace GUI

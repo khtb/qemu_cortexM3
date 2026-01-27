@@ -6,28 +6,38 @@
 namespace CLI
 {
 
-int run(bool l2_mode, const std::string &iface, const Filter &filter)
+CliApp::CliApp(const Core::AppConfig &config) : m_config(config) {}
+
+int CliApp::run()
 {
-    if (l2_mode)
+    if (m_config.l2_mode)
     {
         L2Capture l2;
-        if (!l2.open_capture(iface))
+        if (!l2.open_capture(m_config.iface))
         {
-            fprintf(stderr, "Failed to open interface: %s\n", iface.c_str());
+            fprintf(stderr, "Failed to open interface: %s\n", m_config.iface.c_str());
             return 1;
         }
 
-        printf("Ethernet Logger (CLI L2 Mode) on %s\n", iface.c_str());
-        printf("Press Ctrl+C to exit.\n");
+        if (!m_config.payload_only)
+        {
+            printf("Ethernet Logger (CLI L2 Mode) on %s\n", m_config.iface.c_str());
+            printf("Press Ctrl+C to exit.\n");
+        }
 
         std::vector<LogEntry> logs;
-        // We don't really use logs vector for CLI as we print directly in process_packet
-        // But L2Capture::poll expects it.
-
         while (true)
         {
-            l2.poll(logs, filter);
-            logs.clear(); // Clear to prevent accumulation
+            l2.poll(logs, m_config.filter);
+            if (m_config.payload_only)
+            {
+                for (const auto &log : logs)
+                {
+                    printf("%s\n", log.message.c_str());
+                }
+                fflush(stdout);
+            }
+            logs.clear();
             SLEEP_MS(1);
         }
     }
@@ -40,7 +50,8 @@ int run(bool l2_mode, const std::string &iface, const Filter &filter)
             return 1;
         }
 
-        printf("Ethernet Logger (CLI UDP Mode)\nListening on :12345\n");
+        if (!m_config.payload_only)
+            printf("Ethernet Logger (CLI UDP Mode)\nListening on :12345\n");
 
         unsigned char buffer[2048];
         struct sockaddr_in cliaddr;
@@ -59,19 +70,27 @@ int run(bool l2_mode, const std::string &iface, const Filter &filter)
 
             if (n >= 14)
             {
-                if (packet_matches_filter(buffer, n, filter))
+                if (packet_matches_filter(buffer, n, m_config.filter))
                 {
                     struct eth_header *eh = (struct eth_header *)buffer;
                     unsigned short ether_type = ntohs(eh->h_proto);
 
-                    if (ether_type == ETH_P_LOG)
+                    if (m_config.filter.has_type ? (ether_type == m_config.filter.type)
+                                                 : (ether_type == ETH_P_LOG))
                     {
                         std::string msg((char *)(buffer + 14), n - 14);
                         if (!msg.empty() && msg.back() == '\0')
                             msg.pop_back();
 
-                        double current_time = ((double)clock() / CLOCKS_PER_SEC) - start_time;
-                        printf("[%.3f] (%d bytes) %s\n", current_time, n, msg.c_str());
+                        if (m_config.payload_only)
+                        {
+                            printf("%s\n", msg.c_str());
+                        }
+                        else
+                        {
+                            double current_time = ((double)clock() / CLOCKS_PER_SEC) - start_time;
+                            printf("[%.3f] (%d bytes) %s\n", current_time, n, msg.c_str());
+                        }
                         fflush(stdout);
                     }
                 }

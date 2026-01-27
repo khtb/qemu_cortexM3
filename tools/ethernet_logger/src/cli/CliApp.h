@@ -1,8 +1,16 @@
 #pragma once
-#include "../core/Filter.h"
-#include <string>
+#include "../core/AppConfig.h"
+#include "../core/IApp.h"
 
 namespace CLI
 {
-int run(bool l2_mode, const std::string &iface, const Filter &filter);
-}
+class CliApp : public Core::IApp
+{
+  public:
+    explicit CliApp(const Core::AppConfig &config);
+    int run() override;
+
+  private:
+    Core::AppConfig m_config;
+};
+} // namespace CLI

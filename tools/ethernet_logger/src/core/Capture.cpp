@@ -178,15 +178,41 @@ void L2Capture::process_packet(const unsigned char *pkt, int len, std::vector<Lo
         struct eth_header *eh = (struct eth_header *)pkt;
         unsigned short ether_type = ntohs(eh->h_proto);
 
-        char msg_buf[256];
-        snprintf(msg_buf, sizeof(msg_buf),
-                 "Src:%02X:%02X:%02X:%02X:%02X:%02X Dst:%02X:%02X:%02X:%02X:%02X:%02X Type:0x%04X",
-                 eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3],
-                 eh->h_source[4], eh->h_source[5], eh->h_dest[0], eh->h_dest[1], eh->h_dest[2],
-                 eh->h_dest[3], eh->h_dest[4], eh->h_dest[5], ether_type);
+        // Check if this is a "Log" packet either by active filter or default constant
+        bool is_log_type =
+            filter.has_type ? (ether_type == filter.type) : (ether_type == ETH_P_LOG);
 
-        logs.push_back({GetTimeSeconds(), std::string(msg_buf), len});
-        printf("[%.3f] (%d bytes) %s\n", GetTimeSeconds(), len, msg_buf);
+        if (is_log_type && len > 14)
+        {
+            std::string msg((char *)(pkt + 14), len - 14);
+            // Trim nulls if present at end
+            if (!msg.empty() && msg.back() == '\0')
+                msg.pop_back();
+
+            logs.push_back({GetTimeSeconds(), msg, len});
+            // Print to console potentially (CLI mode relies on this or polls logs)
+            // But CliApp::run handles printing too?
+            // Actually CliApp L2 mode prints logs from 'logs' vector.
+            // But L2Capture::process_packet ALSO prints to stdout?
+            // Line 189: printf("[%.3f] ...")
+            // We should align behavior.
+            // If we are in GUI mode, L2Capture printing to stdout is maybe annoying or useful
+            // debug. Let's keep it but formatted.
+            printf("[%.3f] (%d bytes) %s\n", GetTimeSeconds(), len, msg.c_str());
+        }
+        else
+        {
+            char msg_buf[256];
+            snprintf(
+                msg_buf, sizeof(msg_buf),
+                "Src:%02X:%02X:%02X:%02X:%02X:%02X Dst:%02X:%02X:%02X:%02X:%02X:%02X Type:0x%04X",
+                eh->h_source[0], eh->h_source[1], eh->h_source[2], eh->h_source[3], eh->h_source[4],
+                eh->h_source[5], eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3],
+                eh->h_dest[4], eh->h_dest[5], ether_type);
+
+            logs.push_back({GetTimeSeconds(), std::string(msg_buf), len});
+            printf("[%.3f] (%d bytes) %s\n", GetTimeSeconds(), len, msg_buf);
+        }
         fflush(stdout);
     }
 }

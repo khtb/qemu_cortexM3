@@ -10,6 +10,9 @@
 #include "uart.h"
 #include <stdint.h>
 #include <stdio.h>
+#include "eth_log.h"
+
+
 
 // External declarations for shell command registration functions
 extern void echo_init(void);
@@ -41,9 +44,9 @@ void vTaskNet(void *pvParameters)
             // sprintf(buf, "Tick: %lu", xTaskGetTickCount());
             // Safety: use a static string for now to avoid libc bloat risks if not linked
             logger_log("System Tick...");
+            eth_printf("NetTask Polling Ethernet Interface.\n");
             last_log = xTaskGetTickCount();
         }
-
         /*
          * Lower delay or no delay might be better for throughput,
          * but we yield to prevent starvation if priorities are equal.
@@ -57,6 +60,7 @@ void vTaskShell(void *pvParameters)
 {
     (void)pvParameters;
     uart_puts("[ShellTask] Started.\n");
+    eth_printf("ShellTask Started");
 
     for (;;)
     {

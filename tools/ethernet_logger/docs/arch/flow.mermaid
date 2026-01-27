@@ -1,7 +1,11 @@
 flowchart TD
-    Start[User Run] --> Args{Parsing Args}
-    Args -->|--cli| CLI[CLI Mode]
-    Args -->|Default| GUI[GUI Mode]
+    Start[User Run] --> Parse[AppConfig Parsing]
+    Parse --> Factory{Create App}
+    Factory -->|--cli| CLI[CliApp Instance]
+    Factory -->|Default| GUI[GuiApp Instance]
+    
+    CLI --> Run[IApp::run()]
+    GUI --> Run
     
     subgraph Core Logic
         L2[L2 Capture]
@@ -9,15 +13,14 @@ flowchart TD
         Filter[Packet Filter]
     end
     
-    CLI -->|--l2| L2
-    CLI -->|Default| UDP
-    
-    GUI -->|Selection| L2
-    GUI -->|Default| UDP
+    Run --> Mode{L2 Mode?}
+    Mode -->|Yes| L2
+    Mode -->|No| UDP
     
     L2 -->|Poll| Filter
     UDP -->|Recv| Filter
     
     Filter -->|Match| Log[Log Entry]
-    Log --> Console[Stdout Print]
-    Log --> UI[GUI Window]
+    Log --> Output{Output Strategy}
+    Output -->|CLI| Console[Stdout Print]
+    Output -->|GUI| UI[GUI WindowRender]
