@@ -1,20 +1,44 @@
+// Headers
+#ifdef _WIN32
+#include <windows.h>
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#pragma comment(lib, "ws2_32.lib")
+#else
+#include <arpa/inet.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <unistd.h>
+#endif
+
 #include "imgui.h"
 #include "imgui_impl_opengl3.h"
 #include "imgui_impl_sdl2.h"
 #include <SDL.h>
 #include <SDL_opengl.h>
-#include <arpa/inet.h>
 #include <ctime>
-#include <fcntl.h>
 #include <iomanip>
-#include <netinet/in.h>
 #include <sstream>
 #include <stdio.h>
 #include <string.h>
 #include <string>
-#include <sys/socket.h>
-#include <unistd.h>
 #include <vector>
+
+#ifdef _WIN32
+#define CLOSE_SOCKET(s) closesocket(s)
+#define IS_VALIDSOCKET(s) ((s) != INVALID_SOCKET)
+#define SOCKET_AGAIN (WSAGetLastError() == WSAEWOULDBLOCK)
+#define SLEEP_MS(x) Sleep(x)
+typedef int socklen_t;
+#else
+#define CLOSE_SOCKET(s) close(s)
+#define IS_VALIDSOCKET(s) ((s) >= 0)
+#define SOCKET_AGAIN (errno == EAGAIN || errno == EWOULDBLOCK)
+#define SLEEP_MS(x) usleep((x) * 1000)
+#define INVALID_SOCKET -1
+#define SOCKET_ERROR -1
+#endif
 
 // Ethernet Constants
 #define ETH_ALEN 6
@@ -49,17 +73,22 @@ void run_cli_mode(int sockfd)
 
     while (true)
     {
-        int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+        int n =
+            recvfrom(sockfd, (char *)buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
         if (n < 0)
         {
-            if (errno != EAGAIN && errno != EWOULDBLOCK)
+            if (!SOCKET_AGAIN)
             {
+#ifdef _WIN32
+                fprintf(stderr, "recvfrom failed: %d\n", WSAGetLastError());
+#else
                 perror("recvfrom");
-                usleep(10000); // 10ms wait on error to avoid busy loop if something breaks
+#endif
+                SLEEP_MS(10); // 10ms wait on error
             }
             else
             {
-                usleep(1000); // 1ms wait to lower CPU in CLI polling
+                SLEEP_MS(1); // 1ms wait
             }
             continue;
         }
@@ -95,16 +124,42 @@ int main(int argc, char **argv)
     }
 
     // Setup UDP Socket (Common for both)
-    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
-    if (sockfd < 0)
+    // Initialize Winsock
+#ifdef _WIN32
+    WSADATA wsaData;
+    int iResult = WSAStartup(MAKEWORD(2, 2), &wsaData);
+    if (iResult != 0)
     {
+        printf("WSAStartup failed with error: %d\n", iResult);
+        return 1;
+    }
+#endif
+
+    // Setup UDP Socket (Common for both)
+    int sockfd = socket(AF_INET, SOCK_DGRAM, 0);
+    if (!IS_VALIDSOCKET(sockfd))
+    {
+#ifdef _WIN32
+        printf("socket failed with error: %ld\n", WSAGetLastError());
+#else
         perror("socket");
+#endif
         return 1;
     }
 
     // Set non-blocking
+    // Set non-blocking
+#ifdef _WIN32
+    unsigned long mode = 1;
+    if (ioctlsocket(sockfd, FIONBIO, &mode) != 0)
+    {
+        printf("ioctlsocket failed with error: %d\n", WSAGetLastError());
+        return 1;
+    }
+#else
     int flags = fcntl(sockfd, F_GETFL, 0);
     fcntl(sockfd, F_SETFL, flags | O_NONBLOCK);
+#endif
 
     struct sockaddr_in servaddr;
     memset(&servaddr, 0, sizeof(servaddr));
@@ -114,14 +169,21 @@ int main(int argc, char **argv)
 
     if (bind(sockfd, (const struct sockaddr *)&servaddr, sizeof(servaddr)) < 0)
     {
+#ifdef _WIN32
+        printf("bind failed with error: %d\n", WSAGetLastError());
+#else
         perror("bind");
+#endif
         return 1;
     }
 
     if (cli_mode)
     {
         run_cli_mode(sockfd);
-        close(sockfd);
+        CLOSE_SOCKET(sockfd);
+#ifdef _WIN32
+        WSACleanup();
+#endif
         return 0;
     }
 
@@ -191,12 +253,17 @@ int main(int argc, char **argv)
         // Loop to drain socket buffer
         while (true)
         {
-            int n = recvfrom(sockfd, buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr, &len);
+            int n = recvfrom(sockfd, (char *)buffer, sizeof(buffer), 0, (struct sockaddr *)&cliaddr,
+                             &len);
             if (n < 0)
             {
-                if (errno != EAGAIN && errno != EWOULDBLOCK)
+                if (!SOCKET_AGAIN)
                 {
+#ifdef _WIN32
+                    printf("recvfrom failed: %d\n", WSAGetLastError());
+#else
                     perror("recvfrom");
+#endif
                 }
                 break;
             }
@@ -265,6 +332,13 @@ int main(int argc, char **argv)
     SDL_GL_DeleteContext(gl_context);
     SDL_DestroyWindow(window);
     SDL_Quit();
+
+#ifdef _WIN32
+    CLOSE_SOCKET(sockfd);
+    WSACleanup();
+#else
+    CLOSE_SOCKET(sockfd);
+#endif
 
     return 0;
 }
