@@ -1,0 +1,41 @@
+classDiagram
+    class Main {
+        +main(argc, argv)
+    }
+    
+    class CLI_App {
+        +run(l2_mode, iface, filter)
+    }
+    
+    class GUI_App {
+        +run(l2_mode, iface, filter)
+    }
+    
+    class L2Capture {
+        -interface_name
+        -handle/fd
+        +open_capture(iface)
+        +close_capture()
+        +poll(logs, filter)
+        -process_packet()
+    }
+    
+    class Filter {
+        +enabled
+        +src, dst, type
+    }
+    
+    class DeviceInfo {
+        +name
+        +addresses
+    }
+    
+    Main --> CLI_App : uses (if --cli)
+    Main --> GUI_App : uses (default)
+    
+    CLI_App --> L2Capture : uses (if l2_mode)
+    GUI_App --> L2Capture : uses (if l2_mode)
+    GUI_App --> DeviceInfo : uses (for listing)
+    
+    L2Capture --> Filter : uses
+    L2Capture ..> Platform : uses

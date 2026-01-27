@@ -1,11 +1,17 @@
+VPATH = src/core:src/cli:src/gui
+
 EXE = eth_logger
-SOURCES = main.cpp 
-SOURCES += vendor/imgui/imgui.cpp vendor/imgui/imgui_demo.cpp vendor/imgui/imgui_draw.cpp vendor/imgui/imgui_tables.cpp vendor/imgui/imgui_widgets.cpp
-SOURCES += vendor/imgui/backends/imgui_impl_sdl2.cpp vendor/imgui/backends/imgui_impl_opengl3.cpp
+SOURCES = main.cpp \
+          Filter.cpp Device.cpp Capture.cpp \
+          CliApp.cpp GuiApp.cpp \
+          vendor/imgui/imgui.cpp vendor/imgui/imgui_demo.cpp vendor/imgui/imgui_draw.cpp \
+          vendor/imgui/imgui_tables.cpp vendor/imgui/imgui_widgets.cpp \
+          vendor/imgui/backends/imgui_impl_sdl2.cpp vendor/imgui/backends/imgui_impl_opengl3.cpp
 OBJS = $(addsuffix .o, $(basename $(notdir $(SOURCES))))
 UNAME_S := $(shell uname -s)
 
-CXXFLAGS = -std=c++11 -Ivendor/imgui -Ivendor/imgui/backends
+CXXFLAGS = -std=c++11 -Ivendor/imgui -Ivendor/imgui/backends -I.
+
 CXXFLAGS += -g -Wall -Wformat
 
 ##---------------------------------------------------------------------

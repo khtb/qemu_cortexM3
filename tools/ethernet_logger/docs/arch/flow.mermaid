@@ -1,0 +1,23 @@
+flowchart TD
+    Start[User Run] --> Args{Parsing Args}
+    Args -->|--cli| CLI[CLI Mode]
+    Args -->|Default| GUI[GUI Mode]
+    
+    subgraph Core Logic
+        L2[L2 Capture]
+        UDP[UDP Socket]
+        Filter[Packet Filter]
+    end
+    
+    CLI -->|--l2| L2
+    CLI -->|Default| UDP
+    
+    GUI -->|Selection| L2
+    GUI -->|Default| UDP
+    
+    L2 -->|Poll| Filter
+    UDP -->|Recv| Filter
+    
+    Filter -->|Match| Log[Log Entry]
+    Log --> Console[Stdout Print]
+    Log --> UI[GUI Window]
