@@ -209,7 +209,34 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
                     ImGui::EndCombo();
                 }
 
-                ImGui::InputText("EtherType (Hex)", ethertype_buf, sizeof(ethertype_buf));
+                static bool use_ethertype = true;
+                ImGui::Checkbox("Filter EtherType", &use_ethertype);
+                if (use_ethertype)
+                {
+                    ImGui::Indent();
+                    ImGui::InputText("EtherType (Hex)", ethertype_buf, sizeof(ethertype_buf));
+                    ImGui::Unindent();
+                }
+
+                static bool use_src = false;
+                static char src_buf[18] = "";
+                ImGui::Checkbox("Filter Source MAC", &use_src);
+                if (use_src)
+                {
+                    ImGui::Indent();
+                    ImGui::InputText("Source MAC", src_buf, sizeof(src_buf));
+                    ImGui::Unindent();
+                }
+
+                static bool use_dst = false;
+                static char dst_buf[18] = "";
+                ImGui::Checkbox("Filter Dest MAC", &use_dst);
+                if (use_dst)
+                {
+                    ImGui::Indent();
+                    ImGui::InputText("Dest MAC", dst_buf, sizeof(dst_buf));
+                    ImGui::Unindent();
+                }
 
                 if (!l2_capturing)
                 {
@@ -217,11 +244,56 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
                     {
                         if (selected_device_idx >= 0)
                         {
-                            unsigned short type;
-                            if (parse_hex(ethertype_buf, &type))
+                            filter.enabled = true; // IMPORTANT: Enable filtering logic
+                            filter.has_type = false;
+                            filter.has_src = false;
+                            filter.has_dst = false;
+
+                            bool valid_params = true;
+
+                            if (use_ethertype)
                             {
-                                filter.has_type = true;
-                                filter.type = type;
+                                unsigned short type;
+                                if (parse_hex(ethertype_buf, &type))
+                                {
+                                    filter.has_type = true;
+                                    filter.type = type;
+                                }
+                                else
+                                {
+                                    printf("Invalid EtherType format\n");
+                                    valid_params = false;
+                                }
+                            }
+
+                            if (use_src)
+                            {
+                                if (parse_mac(src_buf, filter.src))
+                                {
+                                    filter.has_src = true;
+                                }
+                                else
+                                {
+                                    printf("Invalid Source MAC format\n");
+                                    valid_params = false;
+                                }
+                            }
+
+                            if (use_dst)
+                            {
+                                if (parse_mac(dst_buf, filter.dst))
+                                {
+                                    filter.has_dst = true;
+                                }
+                                else
+                                {
+                                    printf("Invalid Dest MAC format\n");
+                                    valid_params = false;
+                                }
+                            }
+
+                            if (valid_params)
+                            {
                                 if (l2_capture.open_capture(devices[selected_device_idx].name))
                                 {
                                     l2_capturing = true;
@@ -230,10 +302,6 @@ int run(bool l2_mode_initial, const std::string &iface_initial, const Filter &fi
                                 {
                                     printf("Failed to open adapter\n");
                                 }
-                            }
-                            else
-                            {
-                                printf("Invalid EtherType format\n");
                             }
                         }
                     }
