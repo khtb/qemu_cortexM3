@@ -7,9 +7,19 @@
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <net/if.h>
 #include <netinet/in.h>
+#include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#if defined(__APPLE__)
+#include <net/bpf.h>
+#include <sys/time.h>
+#include <sys/types.h>
+#elif defined(__linux__)
+#include <linux/if_packet.h>
+#include <net/ethernet.h>
+#endif
 #endif
 
 #include "imgui.h"
@@ -58,9 +68,267 @@ struct LogEntry
     int length;
 };
 
-void run_cli_mode(int sockfd)
+struct Filter
+{
+    bool enabled;
+    bool has_src;
+    unsigned char src[6];
+    bool has_dst;
+    unsigned char dst[6];
+    bool has_type;
+    unsigned short type;
+
+    Filter() : enabled(false), has_src(false), has_dst(false), has_type(false), type(0) {}
+};
+
+bool parse_mac(const char *str, unsigned char *out)
+{
+    int values[6];
+    if (sscanf(str, "%x:%x:%x:%x:%x:%x", &values[0], &values[1], &values[2], &values[3], &values[4],
+               &values[5]) == 6)
+    {
+        for (int i = 0; i < 6; i++)
+            out[i] = (unsigned char)values[i];
+        return true;
+    }
+    return false;
+}
+
+bool parse_hex(const char *str, unsigned short *out)
+{
+    int val;
+    if (sscanf(str, "0x%x", &val) == 1 || sscanf(str, "%x", &val) == 1)
+    {
+        *out = (unsigned short)val;
+        return true;
+    }
+    return false;
+}
+
+bool packet_matches_filter(const unsigned char *packet, int len, const Filter &f)
+{
+    if (!f.enabled)
+        return true;
+    if (len < 14)
+        return false;
+
+    struct eth_header *eh = (struct eth_header *)packet;
+
+    if (f.has_src && memcmp(eh->h_source, f.src, 6) != 0)
+        return false;
+    if (f.has_dst && memcmp(eh->h_dest, f.dst, 6) != 0)
+        return false;
+    if (f.has_type && ntohs(eh->h_proto) != f.type)
+        return false;
+
+    return true;
+}
+
+void print_hex_dump(const unsigned char *data, int len)
+{
+    for (int i = 0; i < len; ++i)
+    {
+        printf("%02X ", data[i]);
+        if ((i + 1) % 16 == 0)
+            printf("\n");
+    }
+    printf("\n");
+}
+
+void run_l2_mode(const std::string &iface, const Filter &filter)
+{
+    printf("Ethernet Logger (L2 Raw Mode) on Interface: %s\n", iface.c_str());
+    if (filter.has_src)
+    {
+        printf("Filter Src: %02X:%02X:%02X:%02X:%02X:%02X\n", filter.src[0], filter.src[1],
+               filter.src[2], filter.src[3], filter.src[4], filter.src[5]);
+    }
+    if (filter.has_dst)
+    {
+        printf("Filter Dst: %02X:%02X:%02X:%02X:%02X:%02X\n", filter.dst[0], filter.dst[1],
+               filter.dst[2], filter.dst[3], filter.dst[4], filter.dst[5]);
+    }
+    if (filter.has_type)
+    {
+        printf("Filter Type: 0x%04X\n", filter.type);
+    }
+    printf("Press Ctrl+C to exit.\n\n");
+
+#if defined(_WIN32)
+    printf("Error: L2 Raw Capture is not integrated for Windows in this version (requires "
+           "Npcap/WinPcap).\n");
+    return;
+#elif defined(__APPLE__)
+    // macOS BPF Implementation
+    int bpf = -1;
+    for (int i = 0; i < 99; i++)
+    {
+        char buf[32];
+        sprintf(buf, "/dev/bpf%d", i);
+        bpf = open(buf, O_RDWR);
+        if (bpf >= 0)
+        {
+            printf("Opened %s\n", buf);
+            break;
+        }
+    }
+    if (bpf < 0)
+    {
+        perror("No BPF device available");
+        return;
+    }
+
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, iface.c_str(), sizeof(ifr.ifr_name));
+    if (ioctl(bpf, BIOCSETIF, &ifr) < 0)
+    {
+        perror("BIOCSETIF");
+        close(bpf);
+        return;
+    }
+
+    unsigned int enable = 1;
+    if (ioctl(bpf, BIOCIMMEDIATE, &enable) < 0)
+    {
+        perror("BIOCIMMEDIATE");
+    }
+
+    // Use a reasonable buffer size for BPF
+    int buf_len = 0;
+    if (ioctl(bpf, BIOCGBLEN, &buf_len) < 0)
+    {
+        buf_len = 4096; // Fallback
+    }
+
+    unsigned char *buffer = new unsigned char[buf_len];
+    double start_time = (double)clock() / CLOCKS_PER_SEC;
+
+    while (true)
+    {
+        ssize_t n = read(bpf, buffer, buf_len);
+        if (n <= 0)
+        {
+            if (n < 0 && errno != EAGAIN)
+                perror("read");
+            usleep(1000);
+            continue;
+        }
+
+        unsigned char *p = buffer;
+        unsigned char *end = buffer + n;
+
+        while (p < end)
+        {
+            struct bpf_hdr *bh = (struct bpf_hdr *)p;
+            unsigned char *pkt_data = p + bh->bh_hdrlen;
+
+            if (packet_matches_filter(pkt_data, bh->bh_caplen, filter))
+            {
+                double current_time = ((double)clock() / CLOCKS_PER_SEC) - start_time;
+                struct eth_header *eh = (struct eth_header *)pkt_data;
+                printf("[%.3f] (%d bytes) %02X:%02X:%02X:%02X:%02X:%02X -> "
+                       "%02X:%02X:%02X:%02X:%02X:%02X Type:0x%04X\n",
+                       current_time, bh->bh_caplen, eh->h_source[0], eh->h_source[1],
+                       eh->h_source[2], eh->h_source[3], eh->h_source[4], eh->h_source[5],
+                       eh->h_dest[0], eh->h_dest[1], eh->h_dest[2], eh->h_dest[3], eh->h_dest[4],
+                       eh->h_dest[5], ntohs(eh->h_proto));
+                fflush(stdout);
+            }
+
+            p += BPF_WORDALIGN(bh->bh_hdrlen + bh->bh_caplen);
+        }
+    }
+    delete[] buffer;
+    close(bpf);
+
+#elif defined(__linux__)
+    // Linux AF_PACKET Implementation
+    int sock = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
+    if (sock < 0)
+    {
+        perror("socket(AF_PACKET)");
+        return;
+    }
+
+    struct ifreq ifr;
+    strncpy(ifr.ifr_name, iface.c_str(), sizeof(ifr.ifr_name));
+    if (ioctl(sock, SIOCGIFINDEX, &ifr) < 0)
+    {
+        perror("ioctl(SIOCGIFINDEX)");
+        close(sock);
+        return;
+    }
+
+    struct sockaddr_ll sll;
+    memset(&sll, 0, sizeof(sll));
+    sll.sll_family = AF_PACKET;
+    sll.sll_ifindex = ifr.ifr_ifindex;
+    sll.sll_protocol = htons(ETH_P_ALL);
+
+    if (bind(sock, (struct sockaddr *)&sll, sizeof(sll)) < 0)
+    {
+        perror("bind");
+        close(sock);
+        return;
+    }
+
+    // Set Promiscuous mode
+    struct packet_mreq mr;
+    memset(&mr, 0, sizeof(mr));
+    mr.mr_ifindex = ifr.ifr_ifindex;
+    mr.mr_type = PACKET_MR_PROMISC;
+    if (setsockopt(sock, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr, sizeof(mr)) < 0)
+    {
+        perror("setsockopt(PACKET_MR_PROMISC) failed (ignoring)");
+    }
+
+    unsigned char buffer[65535];
+    double start_time = (double)clock() / CLOCKS_PER_SEC;
+
+    while (true)
+    {
+        int n = recvfrom(sock, buffer, sizeof(buffer), 0, NULL, NULL);
+        if (n < 0)
+        {
+            if (errno != EAGAIN)
+                perror("recvfrom");
+            usleep(1000);
+            continue;
+        }
+
+        if (packet_matches_filter(buffer, n, filter))
+        {
+            double current_time = ((double)clock() / CLOCKS_PER_SEC) - start_time;
+            struct eth_header *eh = (struct eth_header *)buffer;
+            printf("[%.3f] (%d bytes) %02X:%02X:%02X:%02X:%02X:%02X -> "
+                   "%02X:%02X:%02X:%02X:%02X:%02X Type:0x%04X\n",
+                   current_time, n, eh->h_source[0], eh->h_source[1], eh->h_source[2],
+                   eh->h_source[3], eh->h_source[4], eh->h_source[5], eh->h_dest[0], eh->h_dest[1],
+                   eh->h_dest[2], eh->h_dest[3], eh->h_dest[4], eh->h_dest[5], ntohs(eh->h_proto));
+            fflush(stdout);
+        }
+    }
+    close(sock);
+#endif
+}
+
+void run_cli_mode(int sockfd, const Filter &filter)
 {
     printf("Ethernet Logger (CLI Mode)\n");
+    if (filter.has_src)
+    {
+        printf("Filter Src: %02X:%02X:%02X:%02X:%02X:%02X\n", filter.src[0], filter.src[1],
+               filter.src[2], filter.src[3], filter.src[4], filter.src[5]);
+    }
+    if (filter.has_dst)
+    {
+        printf("Filter Dst: %02X:%02X:%02X:%02X:%02X:%02X\n", filter.dst[0], filter.dst[1],
+               filter.dst[2], filter.dst[3], filter.dst[4], filter.dst[5]);
+    }
+    if (filter.has_type)
+    {
+        printf("Filter Type: 0x%04X\n", filter.type);
+    }
     printf("Listening on UDP :12345 for EtherType 0x%X\n", ETH_P_LOG);
     printf("Press Ctrl+C to exit.\n\n");
 
@@ -95,6 +363,9 @@ void run_cli_mode(int sockfd)
 
         if (n >= 14)
         {
+            if (!packet_matches_filter(buffer, n, filter))
+                continue;
+
             struct eth_header *eh = (struct eth_header *)buffer;
             unsigned short ether_type = ntohs(eh->h_proto);
 
@@ -115,15 +386,58 @@ void run_cli_mode(int sockfd)
 int main(int argc, char **argv)
 {
     bool cli_mode = false;
+    bool l2_mode = false;
+    std::string l2_iface;
+    Filter filter;
+
     for (int i = 1; i < argc; i++)
     {
         if (strcmp(argv[i], "--cli") == 0)
         {
             cli_mode = true;
         }
+        else if (strcmp(argv[i], "--l2") == 0 && i + 1 < argc)
+        {
+            l2_mode = true;
+            l2_iface = argv[++i];
+            filter.enabled = true; // Use filter logic implicitly if l2
+        }
+        else if (strcmp(argv[i], "--src") == 0 && i + 1 < argc)
+        {
+            if (parse_mac(argv[++i], filter.src))
+                filter.has_src = true;
+            else
+                printf("Invalid Source MAC: %s\n", argv[i]);
+        }
+        else if (strcmp(argv[i], "--dst") == 0 && i + 1 < argc)
+        {
+            if (parse_mac(argv[++i], filter.dst))
+                filter.has_dst = true;
+            else
+                printf("Invalid Dest MAC: %s\n", argv[i]);
+        }
+        else if (strcmp(argv[i], "--type") == 0 && i + 1 < argc)
+        {
+            if (parse_hex(argv[++i], &filter.type))
+                filter.has_type = true;
+            else
+                printf("Invalid EtherType: %s\n", argv[i]);
+        }
     }
 
-    // Setup UDP Socket (Common for both)
+    if (l2_mode)
+    {
+        if (l2_iface.empty())
+        {
+            printf("Error: --l2 requires an interface name (e.g., --l2 en0)\n");
+            return 1;
+        }
+        run_l2_mode(l2_iface, filter);
+        return 0;
+    }
+
+    // Default UDP Mode
+
     // Initialize Winsock
 #ifdef _WIN32
     WSADATA wsaData;
@@ -179,7 +493,7 @@ int main(int argc, char **argv)
 
     if (cli_mode)
     {
-        run_cli_mode(sockfd);
+        run_cli_mode(sockfd, filter);
         CLOSE_SOCKET(sockfd);
 #ifdef _WIN32
         WSACleanup();
@@ -270,6 +584,9 @@ int main(int argc, char **argv)
 
             if (n >= 14)
             { // Minimum Ethernet Frame
+                if (!packet_matches_filter(buffer, n, filter))
+                    continue;
+
                 // Check Header
                 struct eth_header *eh = (struct eth_header *)buffer;
                 unsigned short ether_type = ntohs(eh->h_proto);
