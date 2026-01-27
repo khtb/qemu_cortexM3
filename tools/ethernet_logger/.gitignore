@@ -1,4 +1,4 @@
 *.o,
 *.d,
 eth_logger
-
+build/*
