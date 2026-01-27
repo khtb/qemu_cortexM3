@@ -43,6 +43,30 @@ else
     exit 1
 fi
 
+# Npcap SDK Setup
+NPCAP_SDK_VERSION="1.13"
+NPCAP_SDK_URL="https://npcap.com/dist/npcap-sdk-${NPCAP_SDK_VERSION}.zip"
+NPCAP_TARGET_DIR="${VENDOR_DIR}/npcap-sdk"
+
+if [ -d "$NPCAP_TARGET_DIR" ]; then
+    echo "Npcap SDK appears to be already installed in $NPCAP_TARGET_DIR"
+else
+    echo "Downloading Npcap SDK ${NPCAP_SDK_VERSION}..."
+    mkdir -p "$TMP_DIR"
+    curl -L -o "$TMP_DIR/npcap-sdk.zip" "$NPCAP_SDK_URL"
+
+    if [ $? -ne 0 ]; then
+        echo "Failed to download Npcap SDK"
+        rm -rf "$TMP_DIR"
+        exit 1
+    fi
+
+    echo "Extracting Npcap SDK..."
+    unzip -q "$TMP_DIR/npcap-sdk.zip" -d "$NPCAP_TARGET_DIR"
+    
+    echo "Npcap SDK installed to $NPCAP_TARGET_DIR"
+fi
+
 # Cleanup
 rm -rf "$TMP_DIR"
 

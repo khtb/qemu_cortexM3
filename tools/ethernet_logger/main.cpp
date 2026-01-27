@@ -1,9 +1,12 @@
 // Headers
 #ifdef _WIN32
+#include <pcap.h>
 #include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
 #pragma comment(lib, "ws2_32.lib")
+#pragma comment(lib, "wpcap.lib")
+#pragma comment(lib, "packet.lib")
 #else
 #include <arpa/inet.h>
 #include <fcntl.h>
@@ -29,6 +32,7 @@
 #include <SDL_opengl.h>
 #include <ctime>
 #include <iomanip>
+#include <set>
 #include <sstream>
 #include <stdio.h>
 #include <string.h>
@@ -42,6 +46,7 @@
 #define SLEEP_MS(x) Sleep(x)
 typedef int socklen_t;
 #else
+#include <ifaddrs.h>
 #define CLOSE_SOCKET(s) close(s)
 #define IS_VALIDSOCKET(s) ((s) >= 0)
 #define SOCKET_AGAIN (errno == EAGAIN || errno == EWOULDBLOCK)
@@ -135,6 +140,69 @@ void print_hex_dump(const unsigned char *data, int len)
     printf("\n");
 }
 
+void list_devices()
+{
+    printf("d Available Network Devices:\n");
+    printf("==========================\n");
+
+#ifdef _WIN32
+    pcap_if_t *alldevs;
+    char errbuf[PCAP_ERRBUF_SIZE];
+
+    if (pcap_findalldevs(&alldevs, errbuf) == -1)
+    {
+        fprintf(stderr, "Error in pcap_findalldevs: %s\n", errbuf);
+        return;
+    }
+
+    if (alldevs == NULL)
+    {
+        printf("No devices found! Make sure Npcap is installed.\n");
+        return;
+    }
+
+    for (pcap_if_t *d = alldevs; d; d = d->next)
+    {
+        printf("Name: %s\n", d->name);
+        if (d->description)
+            printf("      Description: %s\n", d->description);
+        else
+            printf("      Description: (No description available)\n");
+        printf("\n");
+    }
+
+    pcap_freealldevs(alldevs);
+
+#else
+    struct ifaddrs *ifaddr, *ifa;
+    if (getifaddrs(&ifaddr) == -1)
+    {
+        perror("getifaddrs");
+        return;
+    }
+
+    std::set<std::string> devices;
+
+    for (ifa = ifaddr; ifa != NULL; ifa = ifa->ifa_next)
+    {
+        if (ifa->ifa_addr == NULL)
+            continue;
+
+        // Only list AF_PACKET (Linux) or AF_LINK (BSD/macOS) to see physical/logical interfaces
+        // But to be generic, we can just list names.
+        devices.insert(ifa->ifa_name);
+    }
+
+    for (const auto &dev : devices)
+    {
+        printf(" - %s\n", dev.c_str());
+    }
+
+    freeifaddrs(ifaddr);
+#endif
+    printf("\n");
+}
+
 void run_l2_mode(const std::string &iface, const Filter &filter)
 {
     printf("Ethernet Logger (L2 Raw Mode) on Interface: %s\n", iface.c_str());
@@ -155,8 +223,60 @@ void run_l2_mode(const std::string &iface, const Filter &filter)
     printf("Press Ctrl+C to exit.\n\n");
 
 #if defined(_WIN32)
-    printf("Error: L2 Raw Capture is not integrated for Windows in this version (requires "
-           "Npcap/WinPcap).\n");
+    char errbuf[PCAP_ERRBUF_SIZE];
+    pcap_t *adhandle;
+
+    // Open the adapter
+    // Note: The interface name on Windows needs to be the device name (e.g., \Device\NPF_{...})
+    // or the simple name if Npcap is configured to support it, but usually it complicates things.
+    // For now, we assume the user passes the correct device name string.
+
+    // We use pcap_open_live
+    // snaplen: 65536, promisc: 1, to_ms: 1000
+    if ((adhandle = pcap_open_live(iface.c_str(), 65536, 1, 1000, errbuf)) == NULL)
+    {
+        fprintf(stderr, "\nUnable to open the adapter. %s is not supported by Npcap/WinPcap\n",
+                iface.c_str());
+        fprintf(stderr, "Error: %s\n", errbuf);
+        return;
+    }
+
+    printf("Listening on %s...\n", iface.c_str());
+
+    // We don't filter at the pcap kernel level here to keep logic consistent with shared code,
+    // but pcap_compile/pcap_setfilter could be used for performance.
+    // We will use the user-space filter we already have.
+
+    struct pcap_pkthdr *header;
+    const unsigned char *pkt_data;
+    int res;
+
+    double start_time = (double)clock() / CLOCKS_PER_SEC;
+
+    while ((res = pcap_next_ex(adhandle, &header, &pkt_data)) >= 0)
+    {
+        if (res == 0)
+            continue; // Timeout
+
+        if (packet_matches_filter(pkt_data, header->caplen, filter))
+        {
+            double current_time = ((double)clock() / CLOCKS_PER_SEC) - start_time;
+            struct eth_header *eh = (struct eth_header *)pkt_data;
+            printf("[%.3f] (%d bytes) %02X:%02X:%02X:%02X:%02X:%02X -> "
+                   "%02X:%02X:%02X:%02X:%02X:%02X Type:0x%04X\n",
+                   current_time, header->caplen, eh->h_source[0], eh->h_source[1], eh->h_source[2],
+                   eh->h_source[3], eh->h_source[4], eh->h_source[5], eh->h_dest[0], eh->h_dest[1],
+                   eh->h_dest[2], eh->h_dest[3], eh->h_dest[4], eh->h_dest[5], ntohs(eh->h_proto));
+            fflush(stdout);
+        }
+    }
+
+    if (res == -1)
+    {
+        printf("Error reading the packets: %s\n", pcap_geterr(adhandle));
+    }
+
+    pcap_close(adhandle);
     return;
 #elif defined(__APPLE__)
     // macOS BPF Implementation
@@ -395,6 +515,11 @@ int main(int argc, char **argv)
         if (strcmp(argv[i], "--cli") == 0)
         {
             cli_mode = true;
+        }
+        else if (strcmp(argv[i], "--list") == 0)
+        {
+            list_devices();
+            return 0;
         }
         else if (strcmp(argv[i], "--l2") == 0 && i + 1 < argc)
         {

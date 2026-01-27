@@ -57,8 +57,8 @@ MINGW_CXX = x86_64-w64-mingw32-g++
 MINGW_EXE = eth_logger.exe
 # Flags for Windows
 # We need to link against ws2_32 for Winsock, and SDL2/OpenGL
-MINGW_LIBS = -Lvendor/sdl2-win/lib -lmingw32 -lSDL2main -lSDL2 -lws2_32 -lopengl32 -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lversion -luuid -static-libgcc -static-libstdc++
-MINGW_CXXFLAGS = -std=c++11 -Ivendor/imgui -Ivendor/imgui/backends -Ivendor/sdl2-win/include -Ivendor/sdl2-win/include/SDL2 -D_WIN32 -g -Wall -Wformat
+MINGW_LIBS = -Lvendor/sdl2-win/lib -Lvendor/npcap-sdk/Lib/x64 -lmingw32 -lSDL2main -lSDL2 -lws2_32 -lwpcap -lpacket -lopengl32 -lm -ldinput8 -ldxguid -ldxerr8 -luser32 -lgdi32 -lwinmm -limm32 -lole32 -loleaut32 -lshell32 -lversion -luuid -static-libgcc -static-libstdc++
+MINGW_CXXFLAGS = -std=c++11 -Ivendor/imgui -Ivendor/imgui/backends -Ivendor/sdl2-win/include -Ivendor/sdl2-win/include/SDL2 -Ivendor/npcap-sdk/Include -D_WIN32 -DWIN32 -g -Wall -Wformat
 
 windows: 
 	$(MAKE) EXE=$(MINGW_EXE) CXX=$(MINGW_CXX) CXXFLAGS="$(MINGW_CXXFLAGS)" LIBS="$(MINGW_LIBS)" clean all
