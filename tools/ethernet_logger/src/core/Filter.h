@@ -9,10 +9,12 @@ struct Filter
     unsigned char src[6];
     bool has_dst;
     unsigned char dst[6];
+    bool has_vlan;
+    unsigned short vlan_id;
     bool has_type;
     unsigned short type;
 
-    Filter() : enabled(false), has_src(false), has_dst(false), has_type(false), type(0) {}
+    Filter() : enabled(false), has_src(false), has_dst(false), has_vlan(false), vlan_id(0), has_type(false), type(0) {}
 };
 
 bool parse_mac(const char *str, unsigned char *out);

@@ -37,7 +37,21 @@ bool packet_matches_filter(const unsigned char *packet, int len, const Filter &f
         return false;
     if (f.has_dst && memcmp(eh->h_dest, f.dst, 6) != 0)
         return false;
-    if (f.has_type && ntohs(eh->h_proto) != f.type)
+
+    unsigned short ether_type = ntohs(eh->h_proto);
+    if (ether_type == 0x8100) {
+        if (len < 18) return false;
+        unsigned short vlan_tag = ntohs(*(unsigned short*)(packet + 14));
+        unsigned short vlan_id = vlan_tag & 0x0FFF;
+        ether_type = ntohs(*(unsigned short*)(packet + 16));
+
+        if (f.has_vlan && f.vlan_id != vlan_id)
+            return false;
+    } else {
+        if (f.has_vlan) return false;
+    }
+
+    if (f.has_type && ether_type != f.type)
         return false;
 
     return true;

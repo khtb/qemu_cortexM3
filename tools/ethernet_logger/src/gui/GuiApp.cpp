@@ -125,10 +125,17 @@ int GuiApp::run()
                         {
                             struct eth_header *eh = (struct eth_header *)buffer;
                             unsigned short ether_type = ntohs(eh->h_proto);
+                            int payload_offset = 14;
+
+                            if (ether_type == 0x8100 && n >= 18) {
+                                ether_type = ntohs(*(unsigned short*)(buffer + 16));
+                                payload_offset = 18;
+                            }
+
                             if (m_config.filter.has_type ? (ether_type == m_config.filter.type)
                                                          : (ether_type == ETH_P_LOG))
                             {
-                                std::string msg((char *)(buffer + 14), n - 14);
+                                std::string msg((char *)(buffer + payload_offset), n - payload_offset);
                                 if (!msg.empty() && msg.back() == '\0')
                                     msg.pop_back();
                                 logs.push_back({ImGui::GetTime(), msg, n});
@@ -221,6 +228,16 @@ int GuiApp::run()
                     ImGui::EndCombo();
                 }
 
+                static bool use_vlan = false;
+                static char vlan_buf[16] = "";
+                ImGui::Checkbox("Filter VLAN ID", &use_vlan);
+                if (use_vlan)
+                {
+                    ImGui::Indent();
+                    ImGui::InputText("VLAN ID (Dec)", vlan_buf, sizeof(vlan_buf));
+                    ImGui::Unindent();
+                }
+
                 static bool use_ethertype = true;
                 ImGui::Checkbox("Filter EtherType", &use_ethertype);
                 if (use_ethertype)
@@ -260,8 +277,24 @@ int GuiApp::run()
                             filter.has_type = false;
                             filter.has_src = false;
                             filter.has_dst = false;
+                            filter.has_vlan = false;
 
                             bool valid_params = true;
+
+                            if (use_vlan)
+                            {
+                                int vid = atoi(vlan_buf);
+                                if (vid >= 0 && vid <= 4095 && vlan_buf[0] != '\0')
+                                {
+                                    filter.has_vlan = true;
+                                    filter.vlan_id = vid;
+                                }
+                                else
+                                {
+                                    printf("Invalid VLAN ID\n");
+                                    valid_params = false;
+                                }
+                            }
 
                             if (use_ethertype)
                             {

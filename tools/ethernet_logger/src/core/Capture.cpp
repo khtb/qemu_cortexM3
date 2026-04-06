@@ -177,14 +177,20 @@ void L2Capture::process_packet(const unsigned char *pkt, int len, std::vector<Lo
     {
         struct eth_header *eh = (struct eth_header *)pkt;
         unsigned short ether_type = ntohs(eh->h_proto);
+        int payload_offset = 14;
+
+        if (ether_type == 0x8100 && len >= 18) {
+            ether_type = ntohs(*(unsigned short*)(pkt + 16));
+            payload_offset = 18;
+        }
 
         // Check if this is a "Log" packet either by active filter or default constant
         bool is_log_type =
             filter.has_type ? (ether_type == filter.type) : (ether_type == ETH_P_LOG);
 
-        if (is_log_type && len > 14)
+        if (is_log_type && len > payload_offset)
         {
-            std::string msg((char *)(pkt + 14), len - 14);
+            std::string msg((char *)(pkt + payload_offset), len - payload_offset);
             // Trim nulls if present at end
             if (!msg.empty() && msg.back() == '\0')
                 msg.pop_back();
