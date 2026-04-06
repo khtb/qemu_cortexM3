@@ -1,23 +1,20 @@
 #include "FreeRTOS.h"
-#include "lwip/api.h"
-#include "lwip/opt.h"
-#include "lwip/sys.h"
+#include "lwip/tcp.h"
 #include "shell.h"
-#include "task.h"
 #include "uart.h"
 #include <string.h>
 
 #define TELNET_PORT 23
-#define TELNET_THREAD_STACKSIZE 1024
-#define TELNET_THREAD_PRIO 2
 
-static struct netconn *active_conn = NULL;
+static struct tcp_pcb *telnet_pcb = NULL;
+static struct tcp_pcb *active_pcb = NULL;
 
 static void telnet_write(const char *str)
 {
-    if (active_conn)
+    if (active_pcb)
     {
-        netconn_write(active_conn, str, strlen(str), NETCONN_COPY);
+        tcp_write(active_pcb, str, strlen(str), TCP_WRITE_FLAG_COPY);
+        tcp_output(active_pcb);
     }
 }
 
@@ -43,198 +40,233 @@ static void telnet_add_history(const char *cmd)
         history_count++;
 }
 
-static void telnet_process_connection(struct netconn *conn)
-{
-    struct netbuf *buf;
-    void *data;
-    u16_t len;
-    err_t err;
-
-    /* Line Editor State */
+static struct {
     char cmd_buf[MAX_CMD_LEN];
-    int cmd_len = 0;
-    int esc_state = 0;
-    int history_pos = 0;
+    int cmd_len;
+    int esc_state;
+    int history_pos;
+} telnet_state;
 
-    active_conn = conn;
+static void telnet_conn_err(void *arg, err_t err)
+{
+    LWIP_UNUSED_ARG(arg);
+    active_pcb = NULL;
+    uart_puts("[Telnet] Connection Exception/Error.\n");
+}
+
+static err_t telnet_recv(void *arg, struct tcp_pcb *tpcb, struct pbuf *p, err_t err)
+{
+    LWIP_UNUSED_ARG(arg);
+
+    if (p == NULL)
+    {
+        /* Connection closed by remote host */
+        active_pcb = NULL;
+        tcp_arg(tpcb, NULL);
+        tcp_recv(tpcb, NULL);
+        tcp_err(tpcb, NULL);
+        tcp_close(tpcb);
+        uart_puts("[Telnet] Connection Closed.\n");
+        return ERR_OK;
+    }
+
+    if (err != ERR_OK) {
+        if (p != NULL) {
+            pbuf_free(p);
+        }
+        return err;
+    }
+
+    tcp_recved(tpcb, p->tot_len);
+
+    struct pbuf *q;
+    for (q = p; q != NULL; q = q->next)
+    {
+        uint8_t *cdata = (uint8_t *)q->payload;
+        for (int i = 0; i < q->len; i++)
+        {
+            uint8_t c = cdata[i];
+
+            if (c == 0xFF)
+            {
+                i += 2;
+                continue;
+            }
+
+            if (telnet_state.esc_state == 1)
+            {
+                if (c == '[' || c == 'O')
+                    telnet_state.esc_state = 2;
+                else
+                    telnet_state.esc_state = 0;
+            }
+            else if (telnet_state.esc_state == 2)
+            {
+                if (c == 'A') /* Up Arrow */
+                {
+                    if (history_count > 0 && telnet_state.history_pos < history_count)
+                    {
+                        telnet_state.history_pos++;
+                        int idx = (history_head - telnet_state.history_pos + HISTORY_DEPTH) % HISTORY_DEPTH;
+                        while (telnet_state.cmd_len > 0)
+                        {
+                            telnet_write("\b \b");
+                            telnet_state.cmd_len--;
+                        }
+
+                        strncpy(telnet_state.cmd_buf, telnet_history[idx], MAX_CMD_LEN - 1);
+                        telnet_state.cmd_buf[MAX_CMD_LEN - 1] = '\0';
+                        telnet_state.cmd_len = strlen(telnet_state.cmd_buf);
+                        telnet_write(telnet_state.cmd_buf);
+                    }
+                }
+                else if (c == 'B') /* Down Arrow */
+                {
+                    if (telnet_state.history_pos > 0)
+                    {
+                        telnet_state.history_pos--;
+                        while (telnet_state.cmd_len > 0)
+                        {
+                            telnet_write("\b \b");
+                            telnet_state.cmd_len--;
+                        }
+
+                        if (telnet_state.history_pos > 0)
+                        {
+                            int idx = (history_head - telnet_state.history_pos + HISTORY_DEPTH) % HISTORY_DEPTH;
+                            strncpy(telnet_state.cmd_buf, telnet_history[idx], MAX_CMD_LEN - 1);
+                            telnet_state.cmd_buf[MAX_CMD_LEN - 1] = '\0';
+                            telnet_state.cmd_len = strlen(telnet_state.cmd_buf);
+                            telnet_write(telnet_state.cmd_buf);
+                        }
+                        else
+                        {
+                            telnet_state.cmd_buf[0] = '\0';
+                            telnet_state.cmd_len = 0;
+                        }
+                    }
+                }
+                telnet_state.esc_state = 0;
+            }
+            else /* Normal State */
+            {
+                if (c == 0x1B) /* ESC */
+                {
+                    telnet_state.esc_state = 1;
+                }
+                else if (c == '\r' || c == '\n')
+                {
+                    if (telnet_state.cmd_len > 0)
+                    {
+                        telnet_state.cmd_buf[telnet_state.cmd_len] = '\0';
+                        telnet_write("\r\n");
+                        telnet_add_history(telnet_state.cmd_buf);
+
+                        shell_process(telnet_state.cmd_buf, telnet_write);
+
+                        telnet_state.cmd_len = 0;
+                        telnet_state.history_pos = 0;
+                    }
+                    else
+                    {
+                        telnet_write("\r\n");
+                    }
+                    telnet_write("\r\n> ");
+                }
+                else if (c == 0x08 || c == 0x7F) /* Backspace */
+                {
+                    if (telnet_state.cmd_len > 0)
+                    {
+                        telnet_state.cmd_len--;
+                        telnet_write("\b \b");
+                    }
+                }
+                else if (c == 0x09) /* TAB */
+                {
+                    int old_len = telnet_state.cmd_len;
+                    if (shell_autocomplete(telnet_state.cmd_buf, &telnet_state.cmd_len, MAX_CMD_LEN))
+                    {
+                        if (telnet_state.cmd_len > old_len)
+                        {
+                            telnet_write(&telnet_state.cmd_buf[old_len]);
+                        }
+                    }
+                }
+                else if (c >= 32 && c <= 126)
+                {
+                    if (telnet_state.cmd_len < MAX_CMD_LEN - 1)
+                    {
+                        telnet_state.cmd_buf[telnet_state.cmd_len++] = c;
+                        char echo[2] = {c, 0};
+                        telnet_write(echo);
+                    }
+                }
+            }
+        }
+    }
+    pbuf_free(p);
+    return ERR_OK;
+}
+
+static err_t telnet_accept(void *arg, struct tcp_pcb *newpcb, err_t err)
+{
+    LWIP_UNUSED_ARG(arg);
+
+    if (err != ERR_OK || newpcb == NULL) {
+        return ERR_VAL;
+    }
+
+    if (active_pcb != NULL) {
+        uart_puts("[Telnet] Rejecting new connection, already active.\n");
+        return ERR_ABRT; // Reject
+    }
+
+    uart_puts("[Telnet] Connection Accepted.\n");
+
+    active_pcb = newpcb;
+    telnet_state.cmd_len = 0;
+    telnet_state.esc_state = 0;
+    telnet_state.history_pos = 0;
+
+    /* Setup callbacks */
+    tcp_arg(newpcb, NULL);
+    tcp_recv(newpcb, telnet_recv);
+    tcp_err(newpcb, telnet_conn_err);
 
     /* Telnet Negotiation: WILL ECHO, WILL SUPPRESS_GO_AHEAD */
     static const uint8_t telnet_negotiation[] = {
         0xFF, 0xFB, 0x01, /* IAC WILL ECHO */
         0xFF, 0xFB, 0x03  /* IAC WILL SGA */
     };
-    netconn_write(conn, telnet_negotiation, sizeof(telnet_negotiation), NETCONN_COPY);
+    tcp_write(newpcb, telnet_negotiation, sizeof(telnet_negotiation), TCP_WRITE_FLAG_COPY);
 
     /* Send Welcome Message */
     telnet_write("\r\nWelcome to CLI Telnet Server\r\n> ");
+    tcp_output(newpcb);
 
-    while ((err = netconn_recv(conn, &buf)) == ERR_OK)
-    {
-        do
-        {
-            netbuf_data(buf, &data, &len);
-            uint8_t *cdata = (uint8_t *)data;
-
-            for (int i = 0; i < len; i++)
-            {
-                uint8_t c = cdata[i];
-
-                /* Handle/Skip Telnet IAC commands (3 bytes usually: IAC WILL/DO OPTION) */
-                if (c == 0xFF)
-                {
-                    /* Simple skip: jump over the next 2 bytes if they exist in this buffer */
-                    i += 2;
-                    continue;
-                }
-
-                if (esc_state == 1)
-                {
-                    if (c == '[' || c == 'O')
-                        esc_state = 2;
-                    else
-                        esc_state = 0;
-                }
-                else if (esc_state == 2)
-                {
-                    if (c == 'A') /* Up Arrow */
-                    {
-                        if (history_count > 0 && history_pos < history_count)
-                        {
-                            history_pos++;
-                            int idx = (history_head - history_pos + HISTORY_DEPTH) % HISTORY_DEPTH;
-                            /* Clear Line */
-                            while (cmd_len > 0)
-                            {
-                                telnet_write("\b \b");
-                                cmd_len--;
-                            }
-
-                            strncpy(cmd_buf, telnet_history[idx], MAX_CMD_LEN - 1);
-                            cmd_buf[MAX_CMD_LEN - 1] = '\0';
-                            cmd_len = strlen(cmd_buf);
-                            telnet_write(cmd_buf);
-                        }
-                    }
-                    else if (c == 'B') /* Down Arrow */
-                    {
-                        if (history_pos > 0)
-                        {
-                            history_pos--;
-                            /* Clear Line */
-                            while (cmd_len > 0)
-                            {
-                                telnet_write("\b \b");
-                                cmd_len--;
-                            }
-
-                            if (history_pos > 0)
-                            {
-                                int idx =
-                                    (history_head - history_pos + HISTORY_DEPTH) % HISTORY_DEPTH;
-                                strncpy(cmd_buf, telnet_history[idx], MAX_CMD_LEN - 1);
-                                cmd_buf[MAX_CMD_LEN - 1] = '\0';
-                                cmd_len = strlen(cmd_buf);
-                                telnet_write(cmd_buf);
-                            }
-                            else /* Empty */
-                            {
-                                cmd_buf[0] = '\0';
-                                cmd_len = 0;
-                            }
-                        }
-                    }
-                    esc_state = 0;
-                }
-                else /* Normal State */
-                {
-                    if (c == 0x1B) /* ESC */
-                    {
-                        esc_state = 1;
-                    }
-                    else if (c == '\r' || c == '\n')
-                    {
-                        if (cmd_len > 0)
-                        {
-                            cmd_buf[cmd_len] = '\0';
-                            telnet_write("\r\n");
-                            telnet_add_history(cmd_buf);
-
-                            shell_process(cmd_buf, telnet_write);
-
-                            cmd_len = 0;
-                            history_pos = 0;
-                        }
-                        else
-                        {
-                            telnet_write("\r\n");
-                        }
-                        telnet_write("\r\n> ");
-                    }
-                    else if (c == 0x08 || c == 0x7F) /* Backspace */
-                    {
-                        if (cmd_len > 0)
-                        {
-                            cmd_len--;
-                            telnet_write("\b \b");
-                        }
-                    }
-                    else if (c == 0x09) /* TAB */
-                    {
-                        int old_len = cmd_len;
-                        if (shell_autocomplete(cmd_buf, &cmd_len, MAX_CMD_LEN))
-                        {
-                            /* Echo appended part */
-                            if (cmd_len > old_len)
-                            {
-                                telnet_write(&cmd_buf[old_len]);
-                            }
-                        }
-                    }
-                    else if (c >= 32 && c <= 126)
-                    {
-                        if (cmd_len < MAX_CMD_LEN - 1)
-                        {
-                            cmd_buf[cmd_len++] = c;
-                            char echo[2] = {c, 0};
-                            telnet_write(echo);
-                        }
-                    }
-                }
-            }
-        } while (netbuf_next(buf) >= 0);
-
-        netbuf_delete(buf);
-    }
-
-    active_conn = NULL;
-}
-
-static void telnet_thread(void *arg)
-{
-    struct netconn *conn, *newconn;
-    err_t err;
-    LWIP_UNUSED_ARG(arg);
-
-    conn = netconn_new(NETCONN_TCP);
-    netconn_bind(conn, IP_ADDR_ANY, TELNET_PORT);
-    netconn_listen(conn);
-    uart_puts("[Telnet] Listening on port 23...\n");
-
-    for (;;)
-    {
-        err = netconn_accept(conn, &newconn);
-        if (err == ERR_OK)
-        {
-            uart_puts("[Telnet] Connection Accepted.\n");
-            telnet_process_connection(newconn);
-            netconn_delete(newconn);
-            uart_puts("[Telnet] Connection Closed.\n");
-        }
-    }
+    return ERR_OK;
 }
 
 void telnet_init(void)
 {
-    sys_thread_new("telnet_thread", telnet_thread, NULL, TELNET_THREAD_STACKSIZE,
-                   TELNET_THREAD_PRIO);
+    telnet_pcb = tcp_new();
+    if (telnet_pcb != NULL)
+    {
+        err_t err = tcp_bind(telnet_pcb, IP_ADDR_ANY, TELNET_PORT);
+        if (err == ERR_OK)
+        {
+            telnet_pcb = tcp_listen(telnet_pcb);
+            tcp_accept(telnet_pcb, telnet_accept);
+            uart_puts("[Telnet] Listening on port 23 (Raw API)...\n");
+        }
+        else
+        {
+            uart_puts("[Telnet] Bind failed.\n");
+            tcp_close(telnet_pcb);
+        }
+    }
+    else
+    {
+        uart_puts("[Telnet] tcp_new failed.\n");
+    }
 }
