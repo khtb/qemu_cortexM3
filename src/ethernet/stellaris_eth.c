@@ -2,6 +2,8 @@
 #include "uart.h"
 #include <stdint.h>
 #include <string.h>
+#include "FreeRTOS.h"
+#include "task.h"
 
 /*
  * Definitive Stellaris LM3S6965 Ethernet Register Map (QEMU Verified)
@@ -74,6 +76,8 @@ void eth_init(void)
  */
 void eth_send(const uint8_t *data, uint32_t len)
 {
+    taskENTER_CRITICAL();
+    
     /* QEMU/Stellaris TX Framing:
      * The first word written to MAC_DATA must contain:
      * [15:0]  - Total packet length
@@ -97,6 +101,8 @@ void eth_send(const uint8_t *data, uint32_t len)
 
     /* Set Transmit Request (TR) to start the engine */
     MAC_TR = 0x01;
+    
+    taskEXIT_CRITICAL();
 }
 
 /**

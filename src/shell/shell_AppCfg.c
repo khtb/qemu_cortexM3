@@ -43,6 +43,8 @@ extern BaseType_t prvPingCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
                                  const char *pcCommandString);
 extern BaseType_t prvLoggerCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
                                    const char *pcCommandString);
+extern BaseType_t prvVlanCommand(char *pcWriteBuffer, size_t xWriteBufferLen,
+                                 const char *pcCommandString);
 
 /* Definitions for the commands */
 static const CLI_Command_Definition_t xDummyCommand = {
@@ -58,9 +60,13 @@ static const CLI_Command_Definition_t xPingCommand = {
 static const CLI_Command_Definition_t xLoggerCommand = {
     "log", "\r\nlog <msg>:\r\n Send a log message via Ethernet\r\n", prvLoggerCommand, 1};
 
+static const CLI_Command_Definition_t xVlanCommand = {
+    "vlan", "\r\nvlan:\r\n Interface VLAN management (show, set tagged, set untagged)\r\n", prvVlanCommand, -1};
+
 /* The global list of commands to be registered and autocompleted */
 const CLI_Command_Definition_t *const g_registered_commands[] = {&xDummyCommand, &xNetStatus,
-                                                                 &xPingCommand, &xLoggerCommand};
+                                                                 &xPingCommand, &xLoggerCommand,
+                                                                 &xVlanCommand};
 
 const size_t g_num_registered_commands =
     sizeof(g_registered_commands) / sizeof(CLI_Command_Definition_t *);
