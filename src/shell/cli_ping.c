@@ -10,6 +10,7 @@
 #include "FreeRTOS_CLI.h"
 #include "uart.h"
 #include "eth_log.h"
+#include "shell.h"
 #include <stdio.h>
 #include <string.h>
 
@@ -24,6 +25,21 @@ static int ping_run_step = 0;
 static struct raw_pcb *raw_ping_pcb = NULL;
 static ip_addr_t target_addr;
 static int count = 0;
+
+#include <stdarg.h>
+
+static void shell_async_printf(const char *fmt, ...)
+{
+    char buf[128];
+    va_list args;
+    va_start(args, fmt);
+    vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    uart_puts(buf);
+    eth_printf("[PING] %s", buf);
+    telnet_puts(buf);
+}
 
 static u8_t ping_recv(void *arg, struct raw_pcb *pcb, struct pbuf *p, const ip_addr_t *addr)
 {
@@ -108,14 +124,10 @@ static void ping_do_send(void *arg)
     }
     else
     {
-        uart_printf("\r\nPing statistics for %s:\r\n    Packets: Sent = %d, Received = %d, Lost = %d (%.0f%% loss)\r\n> ",
+        shell_async_printf("\r\nPing statistics for %s:\r\n    Packets: Sent = %d, Received = %d, Lost = %d (%.0f%% loss)\r\n> ",
                  ipaddr_ntoa(&target_addr), count, (int)ping_received_count,
                  count - (int)ping_received_count,
                  (double)(count - ping_received_count) / count * 100);
-        
-        eth_printf("[PING] Statistics for %s: Sent = %d, Received = %d, Lost = %d\n",
-                 ipaddr_ntoa(&target_addr), count, (int)ping_received_count,
-                 count - (int)ping_received_count);
         
         raw_remove(raw_ping_pcb);
         raw_ping_pcb = NULL;

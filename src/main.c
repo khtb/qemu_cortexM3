@@ -11,6 +11,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include "eth_log.h"
+#include "udp_app.h"
 
 
 
@@ -93,6 +94,7 @@ int main(void)
     echo_init();
     telnet_init();
     logger_init();
+    udp_app_init();
 
     /* Create Tasks */
     /* NetTask priority should be higher or equal to tcpip_thread (default 3) ideally,

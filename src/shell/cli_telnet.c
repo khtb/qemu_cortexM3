@@ -9,13 +9,24 @@
 static struct tcp_pcb *telnet_pcb = NULL;
 static struct tcp_pcb *active_pcb = NULL;
 
-static void telnet_write(const char *str)
+void telnet_puts(const char *str)
 {
     if (active_pcb)
     {
-        tcp_write(active_pcb, str, strlen(str), TCP_WRITE_FLAG_COPY);
-        tcp_output(active_pcb);
+        err_t err = tcp_write(active_pcb, str, strlen(str), TCP_WRITE_FLAG_COPY);
+        err_t err2 = tcp_output(active_pcb);
+        // Print the error codes to uart so we know if it failed!
+        uart_printf("[telnet_puts] writing %d bytes, err=%d, out_err=%d\r\n", strlen(str), err, err2);
     }
+    else
+    {
+        uart_printf("[telnet_puts] active_pcb is NULL\r\n");
+    }
+}
+
+static void telnet_write(const char *str)
+{
+    telnet_puts(str);
 }
 
 /* Telnet Line Editing similar to UART */

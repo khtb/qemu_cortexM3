@@ -168,9 +168,15 @@ void eth_poll(void)
 uint32_t eth_receive(uint8_t *buf, uint32_t max_len)
 {
     int np = MAC_NP & 0x3F;
-    int ris = MAC_RIS;
-    if ((ris & 0x01) == 0 && np == 0)
+    
+    if (np == 0)
     {
+        /* If FIFO is empty but interrupt is pending, clear it */
+        int ris = MAC_RIS;
+        if (ris & 0x01)
+        {
+            MAC_IACK = 0x01;
+        }
         return 0;
     }
 

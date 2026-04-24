@@ -39,7 +39,7 @@ extern "C"
     extern void shell_process(char *line, shell_output_func_t out_func);
     extern void shell_log(const char *logString);
     extern int shell_autocomplete(char *buf, int *len, int max_len);
-
+    extern void telnet_puts(const char *str);
     /* Centralized command list (Defined in shell_AppCfg.c) */
     extern const CLI_Command_Definition_t *const g_registered_commands[];
     extern const size_t g_num_registered_commands;
