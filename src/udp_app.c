@@ -39,37 +39,32 @@ static void udp_app_thread(void *arg)
         err = netconn_recv(conn, &buf);
 
         if (err == ERR_OK) {
+            void *data;
+            u16_t len;
             ip_addr_t *addr;
             u16_t port;
-            u16_t tot_len;
 
+            netbuf_data(buf, &data, &len);
             addr = netbuf_fromaddr(buf);
             port = netbuf_fromport(buf);
-            tot_len = netbuf_len(buf);
 
-            if (tot_len == sizeof(comm_packet_t)) {
-                comm_packet_t packet;
+            char msg[128];
+            u16_t copy_len = len < (sizeof(msg) - 1) ? len : (sizeof(msg) - 1);
+            memcpy(msg, data, copy_len);
+            msg[copy_len] = '\0';
 
-                /* Safely copy the data from the pbuf chain into our contiguous struct */
-                netbuf_copy(buf, &packet, sizeof(comm_packet_t));
-
-                uart_printf("[UDP App] Rx %d bytes from %s:%d (hdr: 0x%08lX, msg_id: %lu, cmd: %lu)\n", 
-                            tot_len, ipaddr_ntoa(addr), port, packet.header, packet.msg_id, packet.cmd);
-                eth_printf("[UDP App] Comm Req - MsgID: %lu, Cmd: %lu\n", packet.msg_id, packet.cmd);
-
-                /* Process the packet (Dummy Response) */
-                packet.cmd = packet.cmd | 0x80000000; // Set MSB to indicate response
-                packet.msg_id++; 
-                
-                /* Copy the modified struct back into the received pbuf chain */
-                pbuf_take(buf->p, &packet, sizeof(comm_packet_t));
-
-                /* Echo back the packet to the sender */
-                netconn_send(conn, buf);
-            } else {
-                uart_printf("[UDP App] Rx %d bytes from %s:%d (Ignored, expected %d)\n", 
-                            tot_len, ipaddr_ntoa(addr), port, sizeof(comm_packet_t));
+            /* Replace newlines for cleaner UART output */
+            for (u16_t i = 0; i < copy_len; i++) {
+                if (msg[i] == '\n' || msg[i] == '\r') {
+                    msg[i] = ' ';
+                }
             }
+
+            uart_printf("[UDP App] Rx %d bytes from %s:%d: %s\n", len, ipaddr_ntoa(addr), port, msg);
+            eth_printf("[UDP App] Rx: %s\n", msg);
+
+            /* Echo back the packet to the sender */
+            netconn_send(conn, buf);
 
             netbuf_delete(buf);
         }
