@@ -39,32 +39,70 @@ static void udp_app_thread(void *arg)
         err = netconn_recv(conn, &buf);
 
         if (err == ERR_OK) {
-            void *data;
-            u16_t len;
             ip_addr_t *addr;
             u16_t port;
+            u16_t tot_len;
 
-            netbuf_data(buf, &data, &len);
             addr = netbuf_fromaddr(buf);
             port = netbuf_fromport(buf);
+            tot_len = netbuf_len(buf);
 
-            char msg[128];
-            u16_t copy_len = len < (sizeof(msg) - 1) ? len : (sizeof(msg) - 1);
-            memcpy(msg, data, copy_len);
-            msg[copy_len] = '\0';
+            if (tot_len == sizeof(comm_packet_t)) {
+                comm_packet_t packet;
 
-            /* Replace newlines for cleaner UART output */
-            for (u16_t i = 0; i < copy_len; i++) {
-                if (msg[i] == '\n' || msg[i] == '\r') {
-                    msg[i] = ' ';
+                /* Safely copy the data from the pbuf chain into our contiguous struct */
+                netbuf_copy(buf, &packet, sizeof(comm_packet_t));
+
+                uart_printf("[UDP App] Rx %d bytes from %s:%d (hdr: 0x%08lX, msg_id: %lu, cmd: 0x%04lX)\n", 
+                            tot_len, ipaddr_ntoa(addr), port, packet.header, packet.msg_id, packet.cmd);
+                eth_printf("[UDP App] Comm Req - MsgID: %lu, Cmd: 0x%04lX\n", packet.msg_id, packet.cmd);
+
+                if (packet.cmd == CMD_GET_3_FRAMES) {
+                    for (int i = 0; i < 3; i++) {
+                        packet.cmd = CMD_GET_3_FRAMES | 0x80000000; // Set MSB to indicate response
+                        packet.msg_id = i + 1; // Sequence 1, 2, 3
+                        
+                        // Format a payload message
+                        char msg[64];
+                        snprintf(msg, sizeof(msg), "This is Frame %d of 3", i + 1);
+                        packet.payload_len = strlen(msg);
+                        memset(packet.payload, 0, sizeof(packet.payload));
+                        memcpy(packet.payload, msg, packet.payload_len);
+                        
+                        packet.eof_marker = EOF_MARKER_VAL;
+                        
+                        struct netbuf *resp_buf = netbuf_new();
+                        if (resp_buf) {
+                            void *data = netbuf_alloc(resp_buf, sizeof(comm_packet_t));
+                            if (data) {
+                                memcpy(data, &packet, sizeof(comm_packet_t));
+                                netconn_sendto(conn, resp_buf, addr, port);
+                            }
+                            netbuf_delete(resp_buf);
+                        }
+                        
+                        vTaskDelay(pdMS_TO_TICKS(10)); // Slight delay between frames
+                    }
+                } else {
+                    /* Default Echo Process */
+                    packet.cmd = packet.cmd | 0x80000000; // Set MSB to indicate response
+                    packet.msg_id++; 
+                    packet.eof_marker = EOF_MARKER_VAL;
+                    
+                    struct netbuf *resp_buf = netbuf_new();
+                    if (resp_buf) {
+                        void *data = netbuf_alloc(resp_buf, sizeof(comm_packet_t));
+                        if (data) {
+                            memcpy(data, &packet, sizeof(comm_packet_t));
+                            netconn_sendto(conn, resp_buf, addr, port);
+                        }
+                        netbuf_delete(resp_buf);
+                    }
                 }
+            } else {
+                uart_printf("[UDP App] Rx %d bytes from %s:%d (Ignored, expected %d)\n", 
+                            tot_len, ipaddr_ntoa(addr), port, sizeof(comm_packet_t));
             }
-
-            uart_printf("[UDP App] Rx %d bytes from %s:%d: %s\n", len, ipaddr_ntoa(addr), port, msg);
-            eth_printf("[UDP App] Rx: %s\n", msg);
-
-            /* Echo back the packet to the sender */
-            netconn_send(conn, buf);
 
             netbuf_delete(buf);
         }
